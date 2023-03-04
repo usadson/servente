@@ -5,7 +5,7 @@ use tokio::{
     task,
 };
 
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, time::Instant};
 
 mod cert;
 mod client;
@@ -14,6 +14,8 @@ mod http1;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    let start = Instant::now();
+
     let cert_data = cert::load_certificate_locations();
 
     let mut config = rustls::ServerConfig::builder()
@@ -28,9 +30,14 @@ async fn main() -> io::Result<()> {
 
     let config = Arc::new(config);
 
-    task::spawn(async move {
+    println!("Loaded after {} ms", start.elapsed().as_millis());
+
+    let join_handle = task::spawn(async move {
         http1::start("127.0.0.1:8080", config).await
     });
 
+    _ = join_handle.await.unwrap();
+
+    println!("Stopped after {} ms", start.elapsed().as_millis());
     Ok(())
 }
