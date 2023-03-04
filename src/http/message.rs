@@ -5,8 +5,12 @@ use phf::phf_map;
 use unicase::UniCase;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Version {
-
+pub enum HttpVersion {
+    Http09,
+    Http10,
+    Http11,
+    Http2,
+    Http3,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
