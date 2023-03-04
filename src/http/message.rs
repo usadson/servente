@@ -206,10 +206,14 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
 );
 
 impl HeaderName {
-    pub fn from_str(string: &str) -> HeaderName {
-        match STRING_TO_HEADER_NAME_MAP.get(&UniCase::ascii(string)) {
+    pub fn from_str(string: String) -> HeaderName {
+        match STRING_TO_HEADER_NAME_MAP.get(&UniCase::ascii(&string)) {
             Some(header_name) => header_name.clone(),
-            None => HeaderName::Other(string.to_owned()),
+            None => {
+                let mut string = string;
+                string.make_ascii_lowercase();
+                HeaderName::Other(string)
+            }
         }
     }
 
@@ -248,6 +252,7 @@ impl HeaderName {
             HeaderName::SecFetchDest => "Sec-Fetch-Dest",
             HeaderName::SecFetchMode => "Sec-Fetch-Mode",
             HeaderName::SecFetchSite => "Sec-Fetch-Site",
+            HeaderName::SecFetchUser => "Sec-Fetch-User",
             HeaderName::SecWebSocketAccept => "Sec-WebSocket-Accept",
             HeaderName::SecWebSocketExtensions => "Sec-WebSocket-Extensions",
             HeaderName::SecWebSocketKey => "Sec-WebSocket-Key",
