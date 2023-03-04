@@ -1,0 +1,17 @@
+[package]
+name = "servente"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "*"
+rcgen = "*"
+rustls = { version = "*", features = ["quic"] }
+rustls-pemfile = "*"
+tokio = { version = "*", features = ["full"] }
+tokio-rustls = "*"
+phf = { version = "*", features = ["macros", "unicase"] }
+quinn = { version = "*", features = ["rustls"] }
+unicase = "*"
