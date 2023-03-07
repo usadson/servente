@@ -8,11 +8,14 @@ use rustls::{
 };
 use tokio_rustls::TlsAcceptor;
 
-use std::{io, sync::Arc, borrow::Cow, time::SystemTime, env::current_dir, path::Path, fs};
+use std::{io, sync::Arc, time::SystemTime, env::current_dir, path::Path, fs};
 
-use crate::http::{
-    message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind},
-    error::HttpParseError,
+use crate::{
+    http::{
+        message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind, StatusCodeClass},
+        error::HttpParseError,
+    },
+    resources::MediaType,
 };
 
 const TRANSFER_ENCODING_THRESHOLD: u64 = 1024 * 1024; // 1 MiB
@@ -86,36 +89,6 @@ async fn consume_crlf<R>(stream: &mut R) -> Result<(), Error>
     Ok(())
 }
 
-async fn detect_media_type<'a>(request: &Request, response: &Response) -> Cow<'a, str> {
-    if let RequestTarget::Origin(path) = &request.target {
-        if let Some(extension) = path.rfind(".").and_then(|index| path.get((1 + index)..)) {
-            match extension {
-                "htm" => return Cow::Borrowed("text/html;charset=utf-8"),
-                "html" => return Cow::Borrowed("text/html;charset=utf-8"),
-                "css" => return Cow::Borrowed("text/css;charset=utf-8"),
-                "js" => return Cow::Borrowed("application/javascript;charset=utf-8"),
-                "json" => return Cow::Borrowed("application/json;charset=utf-8"),
-                "svg" => return Cow::Borrowed("image/svg+xml"),
-                "png" => return Cow::Borrowed("image/png"),
-                "jpg" => return Cow::Borrowed("image/jpeg"),
-                "jpeg" => return Cow::Borrowed("image/jpeg"),
-                "gif" => return Cow::Borrowed("image/gif"),
-                "ico" => return Cow::Borrowed("image/x-icon"),
-                "txt" => return Cow::Borrowed("text/plain;charset=utf-8"),
-                "xml" => return Cow::Borrowed("application/xml;charset=utf-8"),
-                "pdf" => return Cow::Borrowed("application/pdf"),
-                "zip" => return Cow::Borrowed("application/zip"),
-                "rar" => return Cow::Borrowed("application/x-rar-compressed"),
-                "7z" => return Cow::Borrowed("application/x-7z-compressed"),
-                _ => (),
-            }
-        }
-    }
-
-    _ = response;
-    Cow::Borrowed("application/octet-stream")
-}
-
 async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
     let mut buffer = BufReader::new(stream);
     loop {
@@ -161,9 +134,10 @@ async fn finish_response_general(response: &mut Response) -> Result<(), Error>{
 async fn finish_response_normal(request: &Request, response: &mut Response) -> Result<(), Error>{
     if response.body.is_some() {
         if !response.headers.contains(&HeaderName::ContentType) {
-            response.headers.set(HeaderName::ContentType, detect_media_type(request, response).await.into_owned());
+            response.headers.set(HeaderName::ContentType, MediaType::from_path(request.target.as_str()).as_str().to_owned());
         }
     }
+
     finish_response_general(response).await
 }
 

@@ -543,6 +543,18 @@ pub enum RequestTarget {
     Asterisk,
 }
 
+impl RequestTarget {
+    /// Returns the request target as a string.
+    pub fn as_str(&self) -> &str {
+        match self {
+            RequestTarget::Origin(string) => string,
+            RequestTarget::Absolute(string) => string,
+            RequestTarget::Authority(string) => string,
+            RequestTarget::Asterisk => "*",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Request {
     pub method: Method,

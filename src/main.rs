@@ -11,6 +11,7 @@ mod cert;
 mod client;
 pub mod http;
 mod http1;
+mod resources;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
