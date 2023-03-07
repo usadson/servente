@@ -14,6 +14,19 @@ use crate::http::message::{Request, Method, RequestTarget, HttpVersion, HeaderMa
 
 const TRANSFER_ENCODING_THRESHOLD: u64 = 1024 * 1024; // 1 MiB
 
+struct MaximumLength(pub usize);
+
+impl MaximumLength {
+    /// The maximum length of a method name.
+    pub const METHOD: MaximumLength = MaximumLength(16);
+
+    /// The maximum length of a request target, including the query string.
+    pub const REQUEST_TARGET: MaximumLength = MaximumLength(1024);
+
+    /// The maximum length of a full HTTP header (name + value), excluding the CRLF.
+    pub const HEADER: MaximumLength = MaximumLength(4096);
+}
+
 /// Checks if the request is not modified and returns a 304 response if it isn't.
 async fn check_not_modified(request: &Request, _path: &Path, metadata: &fs::Metadata) -> Result<Option<Response>, io::Error> {
     if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
@@ -85,7 +98,7 @@ async fn detect_media_type<'a>(request: &Request, response: &Response) -> Cow<'a
 async fn discard_request(stream: &mut TcpStream) -> Result<(), io::Error> {
     let mut buffer = BufReader::new(stream);
     loop {
-        let line = read_crlf_line(&mut buffer).await?;
+        let line = read_crlf_line(&mut buffer, MaximumLength::HEADER).await?;
         println!("Discarded: {} ({} len)", line, line.len());
         if line.len() == 0 {
             return Ok(());
@@ -236,11 +249,11 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
     }
 }
 
-async fn read_crlf_line<R>(stream: &mut R) -> Result<String, io::Error>
+async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Result<String, io::Error>
         where R: AsyncBufReadExt + Unpin {
     let mut string = String::new();
 
-    loop {
+    while string.len() < maximum_length.0 {
         let byte = stream.read_u8().await?;
         if byte == '\r' as u8 {
             let byte = stream.read_u8().await?;
@@ -252,6 +265,8 @@ async fn read_crlf_line<R>(stream: &mut R) -> Result<String, io::Error>
 
         string.push(byte as char);
     }
+
+    Err(io::Error::new(io::ErrorKind::InvalidData, "Line too long"))
 }
 
 async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, io::Error>
@@ -259,7 +274,7 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, io::Error>
     let mut headers = Vec::new();
 
     loop {
-        let line = read_crlf_line(stream).await?;
+        let line = read_crlf_line(stream, MaximumLength::HEADER).await?;
         if line.len() == 0 {
             return Ok(HeaderMap::new_with_vec(headers));
         }
@@ -285,11 +300,11 @@ async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, io::Error>
     })
 }
 
-async fn read_string_until_character<R>(stream: &mut R, char: u8) -> Result<String, io::Error>
+async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length: MaximumLength) -> Result<String, io::Error>
         where R: AsyncBufReadExt + Unpin {
     let mut buffer = String::new();
 
-    loop {
+    while buffer.len() < maximum_length.0 {
         let byte = stream.read_u8().await?;
         if byte == char {
             return Ok(buffer);
@@ -297,6 +312,8 @@ async fn read_string_until_character<R>(stream: &mut R, char: u8) -> Result<Stri
 
         buffer.push(byte as char);
     }
+
+    Err(io::Error::new(io::ErrorKind::InvalidData, "String too long"))
 }
 
 async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, io::Error>
@@ -309,7 +326,7 @@ async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, io::E
 async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), io::Error>
         where R: AsyncBufReadExt + Unpin {
 
-    let method = Method::from_str(read_string_until_character(stream, ' ' as u8).await?);
+    let method = Method::from_str(read_string_until_character(stream, ' ' as u8, MaximumLength::METHOD).await?);
 
     // TODO skip OWS
     let target = read_request_target(stream).await?;
@@ -324,7 +341,7 @@ async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, 
 
 async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, io::Error>
         where R: AsyncBufReadExt + Unpin {
-    let str = read_string_until_character(stream, ' ' as u8).await?;
+    let str = read_string_until_character(stream, ' ' as u8, MaximumLength::REQUEST_TARGET).await?;
 
     if str == "*" {
         return Ok(RequestTarget::Asterisk);
