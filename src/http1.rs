@@ -1,6 +1,6 @@
 use tokio::{
     net::{TcpListener, TcpStream},
-    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter},
+    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter}, time::Instant,
 };
 
 use rustls::{
@@ -8,7 +8,7 @@ use rustls::{
 };
 use tokio_rustls::TlsAcceptor;
 
-use std::{io, sync::Arc, time::SystemTime, env::current_dir, path::Path, fs};
+use std::{io, sync::Arc, time::{SystemTime, Duration}, env::current_dir, path::Path, fs};
 
 use crate::{
     http::{
@@ -186,7 +186,6 @@ async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response
                     response.headers.set(HeaderName::LastModified, httpdate::fmt_http_date(modified_date));
                 }
 
-                println!("Path: {:?}", path.display());
                 if request.headers.get(&HeaderName::SecFetchDest) == Some(&String::from("document")) {
                     response.prelude_response.push(Response{
                         version: request.version,
@@ -248,6 +247,8 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
     let mut writer = BufWriter::new(writer);
 
     loop {
+        let start_full = Instant::now();
+
         let request = match read_request_excluding_body(&mut reader).await {
             Ok(request) => request,
             Err(error) => {
@@ -261,8 +262,7 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
             }
         };
 
-        println!("{:?}>: {:?}", request.method, request.target);
-
+        let start_handling = Instant::now();
         let mut response = handle_request(&mut reader, &request).await.unwrap();
         finish_response_normal(&request, &mut response).await.unwrap();
 
@@ -271,7 +271,12 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
         }
         response.prelude_response = Vec::new();
 
-        send_response(&mut writer, response).await.unwrap();
+        let sent_body = send_response(&mut writer, response).await;
+        let Ok(sent_body) = sent_body else {
+            return;
+        };
+
+        println!("{:?}>: {:?} (f={}ms, h={}ms, b={}ms)", request.method, request.target, start_full.elapsed().as_millis(), start_handling.elapsed().as_millis(), sent_body.as_millis());
     }
 }
 
@@ -403,7 +408,7 @@ async fn send_http_upgrade(stream: &mut TcpStream) -> Result<(), io::Error> {
     Ok(())
 }
 
-async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<(), io::Error>
+async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<Duration, io::Error>
         where R: AsyncWriteExt + Unpin {
     let mut use_transfer_encoding = false;
     if let Some(body) = &response.body {
@@ -446,11 +451,12 @@ async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<(), 
     stream.write_all(response_text.as_bytes()).await?;
 
 
+    let start = Instant::now();
     if let Some(response) = response.body {
         match response {
             BodyKind::File(mut response) => {
                 if use_transfer_encoding {
-                    let mut buf: [u8; 4096] = [0; 4096];
+                    let mut buf: [u8; 16384] = [0; 16384];
                     loop {
                         let len = response.read(&mut buf).await?;
 
@@ -476,7 +482,7 @@ async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<(), 
         }
     }
     _ = stream.flush().await;
-    Ok(())
+    Ok(start.elapsed())
 }
 
 pub async fn start(address: &str, tls_config: Arc<ServerConfig>) -> io::Result<()> {
