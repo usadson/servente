@@ -10,9 +10,30 @@ use tokio_rustls::TlsAcceptor;
 
 use std::{io, sync::Arc, borrow::Cow, time::SystemTime, env::current_dir, path::Path, fs};
 
-use crate::http::message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind};
+use crate::http::{
+    message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind},
+    error::HttpParseError,
+};
 
 const TRANSFER_ENCODING_THRESHOLD: u64 = 1024 * 1024; // 1 MiB
+
+#[derive(Debug)]
+pub enum Error {
+    ParseError(HttpParseError),
+    Other(io::Error),
+}
+
+impl From<HttpParseError> for Error {
+    fn from(error: HttpParseError) -> Self {
+        Error::ParseError(error)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(error: io::Error) -> Self {
+        Error::Other(error)
+    }
+}
 
 struct MaximumLength(pub usize);
 
@@ -53,13 +74,13 @@ async fn check_not_modified(request: &Request, _path: &Path, metadata: &fs::Meta
     return Ok(None);
 }
 
-async fn consume_crlf<R>(stream: &mut R) -> Result<(), io::Error>
+async fn consume_crlf<R>(stream: &mut R) -> Result<(), Error>
         where R: AsyncBufReadExt + Unpin {
     let mut buffer = [0u8; 2];
     stream.read_exact(&mut buffer).await?;
 
     if buffer[0] != b'\r' || buffer[1] != b'\n' {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid CRLF"));
+        return Err(Error::ParseError(HttpParseError::InvalidCRLF));
     }
 
     Ok(())
@@ -95,7 +116,7 @@ async fn detect_media_type<'a>(request: &Request, response: &Response) -> Cow<'a
     Cow::Borrowed("application/octet-stream")
 }
 
-async fn discard_request(stream: &mut TcpStream) -> Result<(), io::Error> {
+async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
     let mut buffer = BufReader::new(stream);
     loop {
         let line = read_crlf_line(&mut buffer, MaximumLength::HEADER).await?;
@@ -106,12 +127,12 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), io::Error> {
     }
 }
 
-async fn finish_response(request: &Request, response: &mut Response) -> Result<(), io::Error>{
-    if let Some(body) = &response.body {
-        if !response.headers.contains(&HeaderName::ContentType) {
-            response.headers.set(HeaderName::ContentType, detect_media_type(request, response).await.into_owned());
-        }
+async fn finish_response_error(response: &mut Response) -> Result<(), Error>{
+    finish_response_general(response).await
+}
 
+async fn finish_response_general(response: &mut Response) -> Result<(), Error>{
+    if let Some(body) = &response.body {
         if !response.headers.contains(&HeaderName::LastModified) {
             if let BodyKind::File(file) = body {
                 if let Ok(metadata) = file.metadata().await {
@@ -136,7 +157,27 @@ async fn finish_response(request: &Request, response: &mut Response) -> Result<(
     Ok(())
 }
 
-async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response, io::Error>
+async fn finish_response_normal(request: &Request, response: &mut Response) -> Result<(), Error>{
+    if response.body.is_some() {
+        if !response.headers.contains(&HeaderName::ContentType) {
+            response.headers.set(HeaderName::ContentType, detect_media_type(request, response).await.into_owned());
+        }
+    }
+    finish_response_general(response).await
+}
+
+async fn handle_parse_error(error: HttpParseError) -> Response {
+    match error {
+        HttpParseError::HeaderTooLarge => Response::with_status_and_string_body(StatusCode::RequestHeaderFieldsTooLarge, "Request Header Fields Too Large"),
+        HttpParseError::InvalidCRLF => Response::bad_request("Invalid CRLF"),
+        HttpParseError::InvalidHttpVersion => Response::with_status_and_string_body(StatusCode::HTTPVersionNotSupported, "Invalid HTTP version"),
+        HttpParseError::InvalidRequestTarget => Response::bad_request("Invalid request target"),
+        HttpParseError::MethodTooLarge => Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed"),
+        HttpParseError::RequestTargetTooLarge => Response::with_status_and_string_body(StatusCode::URITooLong, "Invalid request target"),
+    }
+}
+
+async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response, Error>
         where R: AsyncBufReadExt + Unpin {
     if let RequestTarget::Origin(request_target) = &request.target {
         if request.method != Method::Get {
@@ -230,26 +271,33 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
             Ok(request) => request,
             Err(e) => {
                 println!("Client Error: {:?}", e);
-                return;
+                match e {
+                    Error::ParseError(error) => {
+                        let mut response = handle_parse_error(error).await;
+                        finish_response_error(&mut response).await.unwrap();
+                        send_response(&mut writer, response).await.unwrap();
+                        continue;
+                    }
+                    _ => return,
+                }
             }
         };
 
         println!("{:?}>: {:?}", request.method, request.target);
 
         let mut response = handle_request(&mut reader, &request).await.unwrap();
+        finish_response_normal(&request, &mut response).await.unwrap();
 
         for response in response.prelude_response {
             send_response(&mut writer, response).await.unwrap();
         }
         response.prelude_response = Vec::new();
 
-        finish_response(&request, &mut response).await.unwrap();
-
         send_response(&mut writer, response).await.unwrap();
     }
 }
 
-async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Result<String, io::Error>
+async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Result<String, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut string = String::new();
 
@@ -260,16 +308,16 @@ async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Res
             if byte == '\n' as u8 {
                 return Ok(string);
             }
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid CRLF"));
+            return Err(Error::ParseError(HttpParseError::InvalidCRLF));
         }
 
         string.push(byte as char);
     }
 
-    Err(io::Error::new(io::ErrorKind::InvalidData, "Line too long"))
+    Err(Error::ParseError(HttpParseError::HeaderTooLarge))
 }
 
-async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, io::Error>
+async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut headers = Vec::new();
 
@@ -287,7 +335,7 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, io::Error>
     }
 }
 
-async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, io::Error>
+async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut version_buffer = [0u8; 8];
     stream.read_exact(&mut version_buffer).await?;
@@ -296,11 +344,11 @@ async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, io::Error>
         b"HTTP/1.0" => HttpVersion::Http10,
         b"HTTP/1.1" => HttpVersion::Http11,
         b"HTTP/2.0" => HttpVersion::Http2,
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid HTTP version")),
+        _ => return Err(Error::ParseError(HttpParseError::InvalidHttpVersion)),
     })
 }
 
-async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length: MaximumLength) -> Result<String, io::Error>
+async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length: MaximumLength, length_error: HttpParseError) -> Result<String, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut buffer = String::new();
 
@@ -313,20 +361,20 @@ async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length
         buffer.push(byte as char);
     }
 
-    Err(io::Error::new(io::ErrorKind::InvalidData, "String too long"))
+    Err(Error::ParseError(length_error))
 }
 
-async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, io::Error>
+async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error>
         where R: AsyncBufReadExt + Unpin {
     let (method, target, version) = read_request_line(stream).await?;
     let headers = read_headers(stream).await?;
     Ok(Request { method, target, version, headers })
 }
 
-async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), io::Error>
+async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), Error>
         where R: AsyncBufReadExt + Unpin {
 
-    let method = Method::from_str(read_string_until_character(stream, ' ' as u8, MaximumLength::METHOD).await?);
+    let method = Method::from_str(read_string_until_character(stream, ' ' as u8, MaximumLength::METHOD, HttpParseError::MethodTooLarge).await?);
 
     // TODO skip OWS
     let target = read_request_target(stream).await?;
@@ -339,9 +387,9 @@ async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, 
     Ok((method, target, version))
 }
 
-async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, io::Error>
+async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
         where R: AsyncBufReadExt + Unpin {
-    let str = read_string_until_character(stream, ' ' as u8, MaximumLength::REQUEST_TARGET).await?;
+    let str = read_string_until_character(stream, ' ' as u8, MaximumLength::REQUEST_TARGET, HttpParseError::RequestTargetTooLarge).await?;
 
     if str == "*" {
         return Ok(RequestTarget::Asterisk);
@@ -356,7 +404,7 @@ async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, io::Err
         return Ok(RequestTarget::Absolute(str));
     }
 
-    Err(io::Error::new(io::ErrorKind::InvalidData, format!("Invalid request target: \"{}\"", str)))
+    Err(Error::ParseError(HttpParseError::InvalidRequestTarget))
 }
 
 async fn send_http_upgrade(stream: &mut TcpStream) -> Result<(), io::Error> {
