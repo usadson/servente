@@ -16,10 +16,30 @@ pub enum HttpVersion {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StatusCodeClass {
+    /// 1xx: Informational
+    Informational,
+
+    /// 2xx: Success
+    Success,
+
+    /// 3xx: Redirection
+    Redirection,
+
+    /// 4xx: Client Error
+    ClientError,
+
+    /// 5xx: Server Error
+    ServerError,
+}
+
+/// RFC 9110: https://httpwg.org/specs/rfc9110.html#status.codes
+/// IANA: https://www.iana.org/assignments/http-status-codes/http-status-codes.xhtml
+/// Wikipedia: https://en.wikipedia.org/wiki/List_of_HTTP_status_codes
+/// MDN: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u16)]
 pub enum StatusCode {
-    Other(u16),
-
     Continue = 100,
     SwitchingProtocols = 101,
     Processing = 102,
@@ -97,10 +117,20 @@ pub enum StatusCode {
 }
 
 impl StatusCode {
+    /// Returns the class of this status code.
+    pub fn class(&self) -> StatusCodeClass {
+        match *self as u16 {
+            100..=199 => StatusCodeClass::Informational,
+            200..=299 => StatusCodeClass::Success,
+            300..=399 => StatusCodeClass::Redirection,
+            400..=499 => StatusCodeClass::ClientError,
+            500..=599 => StatusCodeClass::ServerError,
+            _ => unreachable!(),
+        }
+    }
+
     pub fn to_string<'a>(&self) -> Cow<'a, str> {
         Cow::Borrowed(match self {
-            StatusCode::Other(code) => return Cow::Owned(format!("{} Some Status", code)),
-
             StatusCode::Continue => "100 Continue",
             StatusCode::SwitchingProtocols => "101 Switching Protocols",
             StatusCode::Processing => "102 Processing",

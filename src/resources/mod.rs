@@ -7,6 +7,7 @@ use unicase::UniCase;
 #[derive(Debug)]
 pub enum MediaType {
     Common(&'static str),
+    #[allow(unused)]
     Custom(String),
 }
 

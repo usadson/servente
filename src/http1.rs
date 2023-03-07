@@ -136,6 +136,12 @@ async fn finish_response_normal(request: &Request, response: &mut Response) -> R
         if !response.headers.contains(&HeaderName::ContentType) {
             response.headers.set(HeaderName::ContentType, MediaType::from_path(request.target.as_str()).as_str().to_owned());
         }
+
+        if response.status.class() == StatusCodeClass::Success {
+            if !response.headers.contains(&HeaderName::CacheControl) {
+                response.headers.set(HeaderName::CacheControl, String::from("max-age=120"));
+            }
+        }
     }
 
     finish_response_general(response).await
