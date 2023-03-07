@@ -8,11 +8,37 @@ use rustls::{
 };
 use tokio_rustls::TlsAcceptor;
 
-use std::{io, sync::Arc, borrow::Cow, time::SystemTime, env::current_dir};
+use std::{io, sync::Arc, borrow::Cow, time::SystemTime, env::current_dir, path::Path, fs};
 
 use crate::http::message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind};
 
 const TRANSFER_ENCODING_THRESHOLD: u64 = 1024 * 1024; // 1 MiB
+
+/// Checks if the request is not modified and returns a 304 response if it isn't.
+async fn check_not_modified(request: &Request, _path: &Path, metadata: &fs::Metadata) -> Result<Option<Response>, io::Error> {
+    if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
+        if let Ok(modified_date) = metadata.modified() {
+            if let Ok(if_modified_since_date) = httpdate::parse_http_date(if_modified_since) {
+                match modified_date.duration_since(if_modified_since_date) {
+                    Ok(duration) => {
+                        if duration.as_secs() == 0 {
+                            let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
+                            response.headers.set(HeaderName::LastModified, if_modified_since.to_owned());
+                            return Ok(Some(response));
+                        }
+                    },
+                    // The file modified time is somehow earlier than
+                    // If-Modified-Date, but that's okay, since the normal file
+                    // handler will handle it.
+                    Err(_) => (),
+                }
+            }
+        }
+    }
+
+    // TODO support etags and stuff
+    return Ok(None);
+}
 
 async fn consume_crlf<R>(stream: &mut R) -> Result<(), io::Error>
         where R: AsyncBufReadExt + Unpin {
@@ -112,10 +138,18 @@ async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response
 
         if let Ok(metadata) = std::fs::metadata(&path) {
             if metadata.is_file() {
+                if let Some(not_modified_response) = check_not_modified(request, &path, &metadata).await? {
+                    return Ok(not_modified_response);
+                }
+
                 let file = tokio::fs::File::open(&path).await.unwrap();
 
                 let mut response = Response::with_status(StatusCode::Ok);
                 response.body = Some(BodyKind::File(file));
+
+                if let Ok(modified_date) = metadata.modified() {
+                    response.headers.set(HeaderName::LastModified, httpdate::fmt_http_date(modified_date));
+                }
 
                 println!("Path: {:?}", path.display());
                 if request.headers.get(&HeaderName::SecFetchDest) == Some(&String::from("document")) {
