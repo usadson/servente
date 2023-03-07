@@ -8,7 +8,7 @@ use rustls::{
 };
 use tokio_rustls::TlsAcceptor;
 
-use std::{io, sync::Arc, borrow::Cow, time::SystemTime, env::current_dir, f32::consts::E};
+use std::{io, sync::Arc, borrow::Cow, time::SystemTime, env::current_dir};
 
 use crate::http::message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind};
 
@@ -168,89 +168,7 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
         let mut response = handle_request(&mut reader, &request).await.unwrap();
         finish_response(&request, &mut response).await.unwrap();
 
-//        println!("Response: {:?}, headers: {:#?}", response.status, response.headers);
-
-        let mut use_transfer_encoding = false;
-        if let Some(body) = &response.body {
-            match body {
-                BodyKind::File(file) => {
-                    let len = file.metadata().await.unwrap().len();
-                    if len > TRANSFER_ENCODING_THRESHOLD {
-                        use_transfer_encoding = true;
-                        response.headers.set(HeaderName::TransferEncoding, "chunked".to_owned());
-                    } else {
-                        response.headers.set(HeaderName::ContentLength, len.to_string());
-                    }
-                }
-                BodyKind::Bytes(bytes) => {
-                    response.headers.set(HeaderName::ContentLength, bytes.len().to_string());
-                }
-                BodyKind::StaticString(string) => {
-                    response.headers.set(HeaderName::ContentLength, string.len().to_string())
-                }
-                BodyKind::String(string) => {
-                    response.headers.set(HeaderName::ContentLength, string.len().to_string())
-                }
-            }
-        }
-
-        let mut response_text = String::with_capacity(1024);
-        response_text.push_str("HTTP/1.1 ");
-        response_text.push_str(&response.status.to_string());
-        response_text.push_str("\r\n");
-
-        for (name, value) in response.headers.iter() {
-            response_text.push_str(name.to_string_h1());
-            response_text.push_str(": ");
-            response_text.push_str(value);
-            response_text.push_str("\r\n");
-        }
-
-        response_text.push_str("\r\n");
-
-        if writer.write_all(response_text.as_bytes()).await.is_err() {
-            return;
-        }
-
-        if let Some(response) = response.body {
-            if match response {
-                BodyKind::File(mut response) => {
-                    if use_transfer_encoding {
-                        let mut buf: [u8; 4096] = [0; 4096];
-                        loop {
-                            let len = match response.read(&mut buf).await {
-                                Ok(len) => len,
-                                Err(e) => {
-                                    println!("Error reading file: {:?}", e);
-                                    return;
-                                }
-                            };
-
-                            if len == 0 {
-                                break;
-                            }
-
-                            // if
-                            writer.write_all(format!("{:X}\r\n", len).as_bytes()).await.unwrap();
-
-                            writer.write_all(&buf[0..len]).await.unwrap();
-
-                            writer.write_all(b"\r\n").await.unwrap();
-                        }
-
-                        writer.write_all(b"0\r\n\r\n").await.err()
-                    } else {
-                        tokio::io::copy(&mut response, &mut writer).await.err()
-                    }
-                }
-                BodyKind::Bytes(response) => writer.write_all(&response).await.err(),
-                BodyKind::StaticString(response) => writer.write_all(response.as_bytes()).await.err(),
-                BodyKind::String(response) => writer.write_all(response.as_bytes()).await.err(),
-            }.is_some() {
-                return;
-            }
-        }
-        _ = writer.flush().await;
+        send_response(&mut writer, response).await.unwrap();
     }
 }
 
@@ -375,6 +293,82 @@ async fn send_http_upgrade(stream: &mut TcpStream) -> Result<(), io::Error> {
     );
     _ = stream.write_all(message.as_bytes()).await?;
     stream.flush().await?;
+    Ok(())
+}
+
+async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<(), io::Error>
+        where R: AsyncWriteExt + Unpin {
+    let mut use_transfer_encoding = false;
+    if let Some(body) = &response.body {
+        match body {
+            BodyKind::File(file) => {
+                let len = file.metadata().await.unwrap().len();
+                if len > TRANSFER_ENCODING_THRESHOLD {
+                    use_transfer_encoding = true;
+                    response.headers.set(HeaderName::TransferEncoding, "chunked".to_owned());
+                } else {
+                    response.headers.set(HeaderName::ContentLength, len.to_string());
+                }
+            }
+            BodyKind::Bytes(bytes) => {
+                response.headers.set(HeaderName::ContentLength, bytes.len().to_string());
+            }
+            BodyKind::StaticString(string) => {
+                response.headers.set(HeaderName::ContentLength, string.len().to_string())
+            }
+            BodyKind::String(string) => {
+                response.headers.set(HeaderName::ContentLength, string.len().to_string())
+            }
+        }
+    }
+
+    let mut response_text = String::with_capacity(1024);
+    response_text.push_str("HTTP/1.1 ");
+    response_text.push_str(&response.status.to_string());
+    response_text.push_str("\r\n");
+
+    for (name, value) in response.headers.iter() {
+        response_text.push_str(name.to_string_h1());
+        response_text.push_str(": ");
+        response_text.push_str(value);
+        response_text.push_str("\r\n");
+    }
+
+    response_text.push_str("\r\n");
+
+    stream.write_all(response_text.as_bytes()).await?;
+
+
+    if let Some(response) = response.body {
+        match response {
+            BodyKind::File(mut response) => {
+                if use_transfer_encoding {
+                    let mut buf: [u8; 4096] = [0; 4096];
+                    loop {
+                        let len = response.read(&mut buf).await?;
+
+                        if len == 0 {
+                            break;
+                        }
+
+                        stream.write_all(format!("{:X}\r\n", len).as_bytes()).await?;
+
+                        stream.write_all(&buf[0..len]).await?;
+
+                        stream.write_all(b"\r\n").await?;
+                    }
+
+                    stream.write_all(b"0\r\n\r\n").await?;
+                } else {
+                    tokio::io::copy(&mut response, stream).await?;
+                }
+            }
+            BodyKind::Bytes(response) => stream.write_all(&response).await?,
+            BodyKind::StaticString(response) => stream.write_all(response.as_bytes()).await?,
+            BodyKind::String(response) => stream.write_all(response.as_bytes()).await?,
+        }
+    }
+    _ = stream.flush().await;
     Ok(())
 }
 
