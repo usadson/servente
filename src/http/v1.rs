@@ -5,8 +5,6 @@ use anyhow::bail;
 
 use crate::http::message::{
     Request,
-    Method,
-    HeaderName,
 };
 
 pub async fn parse_request() -> anyhow::Result<Request> {

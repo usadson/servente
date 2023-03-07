@@ -93,6 +93,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "httpdate"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
+
+[[package]]
 name = "js-sys"
 version = "0.3.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -486,6 +492,7 @@ name = "servente"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "httpdate",
  "phf",
  "quinn",
  "rcgen",
@@ -494,6 +501,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "unicase",
+ "urlencoding",
 ]
 
 [[package]]
@@ -698,6 +706,12 @@ name = "untrusted"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
+
+[[package]]
+name = "urlencoding"
+version = "2.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8db7427f936968176eaa7cdf81b7f98b980b18495ec28f1b5791ac3bfe3eea9"
 
 [[package]]
 name = "version_check"

@@ -1,3 +1,4 @@
-/target
+.servente
 .vscode
-.servente/
+target
+wwwroot
