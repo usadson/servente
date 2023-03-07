@@ -112,10 +112,34 @@ async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response
 
         if let Ok(metadata) = std::fs::metadata(&path) {
             if metadata.is_file() {
-                let file = tokio::fs::File::open(path).await.unwrap();
+                let file = tokio::fs::File::open(&path).await.unwrap();
 
                 let mut response = Response::with_status(StatusCode::Ok);
                 response.body = Some(BodyKind::File(file));
+
+                println!("Path: {:?}", path.display());
+                if request.headers.get(&HeaderName::SecFetchDest) == Some(&String::from("document")) {
+                    response.prelude_response.push(Response{
+                        version: request.version,
+                        status: StatusCode::EarlyHints,
+                        headers: HeaderMap::new_with_vec(vec![
+                            (HeaderName::Link, String::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
+                            (HeaderName::Link, String::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
+                            (HeaderName::Link, String::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
+                            (HeaderName::Link, String::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
+                            (HeaderName::Link, String::from("<script.js>; rel=preload; as=script")),
+                        ]),
+                        body: None,
+                        prelude_response: vec![],
+                    });
+                    response.headers = HeaderMap::new_with_vec(vec![
+                        (HeaderName::Link, String::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
+                        (HeaderName::Link, String::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
+                        (HeaderName::Link, String::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
+                        (HeaderName::Link, String::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
+                    ]);
+                }
+
                 return Ok(response);
             }
         }
@@ -166,6 +190,12 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
         println!("{:?}>: {:?}", request.method, request.target);
 
         let mut response = handle_request(&mut reader, &request).await.unwrap();
+
+        for response in response.prelude_response {
+            send_response(&mut writer, response).await.unwrap();
+        }
+        response.prelude_response = Vec::new();
+
         finish_response(&request, &mut response).await.unwrap();
 
         send_response(&mut writer, response).await.unwrap();

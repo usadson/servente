@@ -561,6 +561,9 @@ pub enum BodyKind {
 
 #[derive(Debug)]
 pub struct Response {
+    /// Responses that are sent before this one, commonly 1xx response.
+    /// E.g. 103 Early Hints.
+    pub prelude_response: Vec<Response>,
     pub version: HttpVersion,
     pub status: StatusCode,
     pub headers: HeaderMap,
@@ -570,6 +573,7 @@ pub struct Response {
 impl Response {
     pub fn with_status(status: StatusCode) -> Self {
         Self {
+            prelude_response: Vec::new(),
             version: HttpVersion::Http11,
             status,
             headers: HeaderMap::new(),
@@ -581,6 +585,7 @@ impl Response {
         let mut headers = HeaderMap::new();
         headers.set(HeaderName::ContentType, "text/plain; charset=utf-8".to_owned());
         Self {
+            prelude_response: Vec::new(),
             version: HttpVersion::Http11,
             status,
             headers,
