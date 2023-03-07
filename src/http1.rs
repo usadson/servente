@@ -128,6 +128,7 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
 }
 
 async fn finish_response_error(response: &mut Response) -> Result<(), Error>{
+    response.headers.set(HeaderName::Connection, String::from("close"));
     finish_response_general(response).await
 }
 
@@ -269,17 +270,14 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
     loop {
         let request = match read_request_excluding_body(&mut reader).await {
             Ok(request) => request,
-            Err(e) => {
-                println!("Client Error: {:?}", e);
-                match e {
-                    Error::ParseError(error) => {
-                        let mut response = handle_parse_error(error).await;
-                        finish_response_error(&mut response).await.unwrap();
-                        send_response(&mut writer, response).await.unwrap();
-                        continue;
-                    }
-                    _ => return,
+            Err(error) => {
+                println!("Client Error: {:?}", error);
+                if let Error::ParseError(error) = error {
+                    let mut response = handle_parse_error(error).await;
+                    finish_response_error(&mut response).await.unwrap();
+                    send_response(&mut writer, response).await.unwrap();
                 }
+                return;
             }
         };
 
