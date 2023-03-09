@@ -4,7 +4,7 @@
 use phf::phf_map;
 use unicase::UniCase;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MediaType {
     Common(&'static str),
     #[allow(unused)]

@@ -1,10 +1,14 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, time::SystemTime};
 
 use phf::phf_map;
 use unicase::UniCase;
+
+use crate::resources::MediaType;
+
+use super::hints::SecFetchDest;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HttpVersion {
@@ -416,9 +420,123 @@ impl HeaderName {
     }
 }
 
+/// Represents a value of a header.
+///
+/// This makes transforming the response easier for shared code paths, for
+/// example when the header is used in multiple places, this avoids
+/// serializing and deserializing which improves performance.
+///
+/// `HeaderValue` can also be used to restrict the types of setting various
+/// `HeaderName`s. Most headers have a strict format, making them less
+/// error-prone for the handler.
+///
+/// Another advantage is that we can have a simpler API to use, such as the
+/// `SecFetchDest` enum.
+///
+/// At last, this removes the deserialization strain from the handler to
+/// the transport code.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum HeaderValue {
+    StaticString(&'static str),
+    String(String),
+    DateTime(SystemTime),
+    MediaType(MediaType),
+    SecFetchDest(SecFetchDest),
+    Size(usize),
+}
+
+impl HeaderValue {
+    /// Returns the value as a string, but does not convert it to a string if
+    /// it is some other non-convertible type.
+    pub fn as_str_no_convert(&self) -> Option<&str> {
+        match self {
+            HeaderValue::StaticString(string) => Some(string),
+            HeaderValue::String(string) => Some(string),
+            _ => None,
+        }
+    }
+
+    pub fn append_to_message(&self, response_text: &mut String) {
+        match self {
+            HeaderValue::StaticString(string) => {
+                response_text.push_str(string);
+            }
+            HeaderValue::String(string) => {
+                response_text.push_str(string);
+            }
+            HeaderValue::DateTime(date_time) => {
+                response_text.push_str(&httpdate::fmt_http_date(*date_time));
+            }
+            HeaderValue::MediaType(media_type) => {
+                response_text.push_str(media_type.as_str());
+            }
+            HeaderValue::SecFetchDest(sec_fetch_dest) => {
+                response_text.push_str(sec_fetch_dest.as_str());
+            }
+            HeaderValue::Size(size) => {
+                response_text.push_str(&size.to_string());
+            }
+        }
+    }
+}
+
+impl From<&'static str> for HeaderValue {
+    fn from(string: &'static str) -> HeaderValue {
+        HeaderValue::StaticString(string)
+    }
+}
+
+impl From<String> for HeaderValue {
+    fn from(string: String) -> HeaderValue {
+        HeaderValue::String(string)
+    }
+}
+
+impl From<SystemTime> for HeaderValue {
+    fn from(date_time: SystemTime) -> HeaderValue {
+        HeaderValue::DateTime(date_time)
+    }
+}
+
+impl From<MediaType> for HeaderValue {
+    fn from(media_type: MediaType) -> HeaderValue {
+        HeaderValue::MediaType(media_type)
+    }
+}
+
+impl From<SecFetchDest> for HeaderValue {
+    fn from(sec_fetch_dest: SecFetchDest) -> HeaderValue {
+        HeaderValue::SecFetchDest(sec_fetch_dest)
+    }
+}
+
+impl From<usize> for HeaderValue {
+    fn from(size: usize) -> HeaderValue {
+        HeaderValue::Size(size)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum HeaderValueDateTimeParseError {
+    InvalidFormat,
+}
+
+impl TryInto<SystemTime> for &HeaderValue {
+    type Error = HeaderValueDateTimeParseError;
+
+    fn try_into(self) -> Result<SystemTime, Self::Error> {
+        match self {
+            HeaderValue::StaticString(string) => httpdate::parse_http_date(string).map_err(|_| HeaderValueDateTimeParseError::InvalidFormat),
+            HeaderValue::String(string) => httpdate::parse_http_date(&string).map_err(|_| HeaderValueDateTimeParseError::InvalidFormat),
+            HeaderValue::DateTime(date_time) => Ok(*date_time),
+            _ => Err(HeaderValueDateTimeParseError::InvalidFormat),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HeaderMap {
-    headers: Vec<(HeaderName, String)>,
+    headers: Vec<(HeaderName, HeaderValue)>,
 }
 
 impl HeaderMap {
@@ -426,7 +544,7 @@ impl HeaderMap {
         HeaderMap { headers: Vec::new() }
     }
 
-    pub fn new_with_vec(headers: Vec<(HeaderName, String)>) -> HeaderMap {
+    pub fn new_with_vec(headers: Vec<(HeaderName, HeaderValue)>) -> HeaderMap {
         HeaderMap { headers }
     }
 
@@ -440,7 +558,7 @@ impl HeaderMap {
         false
     }
 
-    pub fn get(&self, header_name: &HeaderName) -> Option<&str> {
+    pub fn get(&self, header_name: &HeaderName) -> Option<&HeaderValue> {
         for (name, value) in &self.headers {
             if name == header_name {
                 return Some(value);
@@ -450,7 +568,7 @@ impl HeaderMap {
         None
     }
 
-    pub fn set(&mut self, header_name: HeaderName, value: String) {
+    pub fn set(&mut self, header_name: HeaderName, value: HeaderValue) {
         for (name, existing_value) in &mut self.headers {
             if name == &header_name {
                 *existing_value = value;
@@ -465,8 +583,23 @@ impl HeaderMap {
         self.headers.retain(|(name, _)| name != header_name);
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&HeaderName, &str)> {
-        self.headers.iter().map(|(name, value)| (name, value.as_str()))
+    pub fn iter(&self) -> impl Iterator<Item = &(HeaderName, HeaderValue)> {
+        self.headers.iter()
+    }
+}
+
+//
+// Header-specific methods
+//
+impl HeaderMap {
+    pub fn set_content_length(&mut self, length: usize) {
+        self.set(HeaderName::ContentLength, HeaderValue::Size(length));
+    }
+
+    pub fn sec_fetch_dest(&self) -> Option<SecFetchDest> {
+        self.get(&HeaderName::SecFetchDest)
+            .and_then(|value| value.as_str_no_convert())
+            .and_then(|string| SecFetchDest::parse(string))
     }
 }
 
@@ -625,7 +758,7 @@ impl Response {
 
     pub fn with_status_and_string_body(status: StatusCode, body: impl Into<Cow<'static, str>>) -> Self {
         let mut headers = HeaderMap::new();
-        headers.set(HeaderName::ContentType, "text/plain; charset=utf-8".to_owned());
+        headers.set(HeaderName::ContentType, HeaderValue::from("text/plain; charset=utf-8"));
         Self {
             prelude_response: Vec::new(),
             version: HttpVersion::Http11,

@@ -12,8 +12,8 @@ use std::{io, sync::Arc, time::{SystemTime, Duration}, env::current_dir, path::P
 
 use crate::{
     http::{
-        message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind, StatusCodeClass},
-        error::HttpParseError,
+        message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind, StatusCodeClass, HeaderValue},
+        error::HttpParseError, hints::SecFetchDest,
     },
     resources::MediaType,
 };
@@ -55,7 +55,7 @@ impl MaximumLength {
 async fn check_not_modified(request: &Request, _path: &Path, metadata: &fs::Metadata) -> Result<Option<Response>, io::Error> {
     if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
         if let Ok(modified_date) = metadata.modified() {
-            if let Ok(if_modified_since_date) = httpdate::parse_http_date(if_modified_since) {
+            if let Ok(if_modified_since_date) = if_modified_since.try_into() {
                 match modified_date.duration_since(if_modified_since_date) {
                     Ok(duration) => {
                         if duration.as_secs() == 0 {
@@ -100,7 +100,7 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
 }
 
 async fn finish_response_error(response: &mut Response) -> Result<(), io::Error>{
-    response.headers.set(HeaderName::Connection, String::from("close"));
+    response.headers.set(HeaderName::Connection, HeaderValue::from("close"));
     finish_response_general(response).await
 }
 
@@ -110,21 +110,21 @@ async fn finish_response_general(response: &mut Response) -> Result<(), io::Erro
             if let BodyKind::File(file) = body {
                 if let Ok(metadata) = file.metadata().await {
                     if let Ok(modified_date) = metadata.modified() {
-                        response.headers.set(HeaderName::LastModified, httpdate::fmt_http_date(modified_date));
+                        response.headers.set(HeaderName::LastModified, HeaderValue::from(modified_date));
                     }
                 }
             }
         }
     }
 
-    response.headers.set(HeaderName::Server, String::from("servente"));
+    response.headers.set(HeaderName::Server, HeaderValue::from("servente"));
 
     if !response.headers.contains(&HeaderName::Connection) {
-        response.headers.set(HeaderName::Connection, String::from("keep-alive"));
+        response.headers.set(HeaderName::Connection, HeaderValue::from("keep-alive"));
     }
 
     if !response.headers.contains(&HeaderName::Date) {
-        response.headers.set(HeaderName::Date, httpdate::fmt_http_date(SystemTime::now()));
+        response.headers.set(HeaderName::Date, SystemTime::now().into());
     }
 
     Ok(())
@@ -133,12 +133,12 @@ async fn finish_response_general(response: &mut Response) -> Result<(), io::Erro
 async fn finish_response_normal(request: &Request, response: &mut Response) -> Result<(), io::Error>{
     if response.body.is_some() {
         if !response.headers.contains(&HeaderName::ContentType) {
-            response.headers.set(HeaderName::ContentType, MediaType::from_path(request.target.as_str()).as_str().to_owned());
+            response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(request.target.as_str()).clone()));
         }
 
         if response.status.class() == StatusCodeClass::Success {
             if !response.headers.contains(&HeaderName::CacheControl) {
-                response.headers.set(HeaderName::CacheControl, String::from("max-age=120"));
+                response.headers.set(HeaderName::CacheControl, HeaderValue::from("max-age=120"));
             }
         }
     }
@@ -227,28 +227,28 @@ async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response
                 response.body = Some(BodyKind::File(file));
 
                 if let Ok(modified_date) = metadata.modified() {
-                    response.headers.set(HeaderName::LastModified, httpdate::fmt_http_date(modified_date));
+                    response.headers.set(HeaderName::LastModified, modified_date.into());
                 }
 
-                if request.headers.get(&HeaderName::SecFetchDest) == Some(&String::from("document")) {
+                if request.headers.sec_fetch_dest() == Some(SecFetchDest::Document) {
                     response.prelude_response.push(Response{
                         version: request.version,
                         status: StatusCode::EarlyHints,
                         headers: HeaderMap::new_with_vec(vec![
-                            (HeaderName::Link, String::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
-                            (HeaderName::Link, String::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
-                            (HeaderName::Link, String::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
-                            (HeaderName::Link, String::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
-                            (HeaderName::Link, String::from("<script.js>; rel=preload; as=script")),
+                            (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
+                            (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
+                            (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
+                            (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
+                            (HeaderName::Link, HeaderValue::from("<script.js>; rel=preload; as=script")),
                         ]),
                         body: None,
                         prelude_response: vec![],
                     });
                     response.headers = HeaderMap::new_with_vec(vec![
-                        (HeaderName::Link, String::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
-                        (HeaderName::Link, String::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
-                        (HeaderName::Link, String::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
-                        (HeaderName::Link, String::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
+                        (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
+                        (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
+                        (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
+                        (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
                     ]);
                 }
 
@@ -329,7 +329,7 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         let name = parts.next().unwrap().trim().to_string();
         let value = parts.next().unwrap().trim().to_string();
 
-        headers.push((HeaderName::from_str(name), value));
+        headers.push((HeaderName::from_str(name), HeaderValue::from(value)));
     }
 }
 
@@ -432,19 +432,19 @@ async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<Dura
                 let len = file.metadata().await.unwrap().len();
                 if len > TRANSFER_ENCODING_THRESHOLD {
                     use_transfer_encoding = true;
-                    response.headers.set(HeaderName::TransferEncoding, "chunked".to_owned());
+                    response.headers.set(HeaderName::TransferEncoding, "chunked".into());
                 } else {
-                    response.headers.set(HeaderName::ContentLength, len.to_string());
+                    response.headers.set_content_length(len as _);
                 }
             }
             BodyKind::Bytes(bytes) => {
-                response.headers.set(HeaderName::ContentLength, bytes.len().to_string());
+                response.headers.set_content_length(bytes.len());
             }
             BodyKind::StaticString(string) => {
-                response.headers.set(HeaderName::ContentLength, string.len().to_string())
+                response.headers.set_content_length(string.len());
             }
             BodyKind::String(string) => {
-                response.headers.set(HeaderName::ContentLength, string.len().to_string())
+                response.headers.set_content_length(string.len());
             }
         }
     }
@@ -457,7 +457,7 @@ async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<Dura
     for (name, value) in response.headers.iter() {
         response_text.push_str(name.to_string_h1());
         response_text.push_str(": ");
-        response_text.push_str(value);
+        value.append_to_message(&mut response_text);
         response_text.push_str("\r\n");
     }
 
