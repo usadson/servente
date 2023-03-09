@@ -704,7 +704,10 @@ impl Method {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RequestTarget {
-    Origin(String),
+    Origin {
+        path: String,
+        query: String,
+    },
     Absolute(String),
     Authority(String),
     Asterisk,
@@ -714,7 +717,7 @@ impl RequestTarget {
     /// Returns the request target as a string.
     pub fn as_str(&self) -> &str {
         match self {
-            RequestTarget::Origin(string) => string,
+            RequestTarget::Origin{ path, .. } => path,
             RequestTarget::Absolute(string) => string,
             RequestTarget::Authority(string) => string,
             RequestTarget::Asterisk => "*",

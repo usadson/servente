@@ -204,7 +204,8 @@ async fn handle_parse_error(error: HttpParseError) -> Response {
 
 async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response, Error>
         where R: AsyncBufReadExt + Unpin {
-    if let RequestTarget::Origin(request_target) = &request.target {
+    if let RequestTarget::Origin { path, .. } = &request.target {
+        let request_target = path.as_str();
         if request.method != Method::Get {
             return Ok(Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed"));
         }
@@ -405,7 +406,11 @@ async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
     }
 
     if str.starts_with("/") {
-        return Ok(RequestTarget::Origin(str));
+        let mut parts = str.splitn(2, '?');
+        return Ok(RequestTarget::Origin {
+            path: parts.next().unwrap().to_string(),
+            query: parts.next().unwrap_or("").to_string(),
+        });
     }
 
     // TODO
