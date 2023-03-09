@@ -275,6 +275,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
     response.headers.set(HeaderName::ContentSecurityPolicy, "default-src 'self'; upgrade-insecure-requests; style-src-elem 'self' 'unsafe-inline'".into());
 
     response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML));
+    response.headers.set(HeaderName::ContentLanguage, "en".into());
 
     match request_target {
         "/" | "/index" | "/index.html" => {
@@ -283,6 +284,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
                     if let Some(best) = accepted_languages.match_best(vec!["nl", "en"]) {
                         if best == "nl" {
                             response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML_NL));
+                            response.headers.set(HeaderName::ContentLanguage, "nl".into());
                         }
                     }
                 }
@@ -291,6 +293,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
         "/welcome.en.html" => (),
         "/welcome.nl.html" => {
             response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML_NL));
+            response.headers.set(HeaderName::ContentLanguage, "nl".into());
         }
         _ => return Ok(Response::with_status_and_string_body(StatusCode::NotFound, "Not Found")),
     }

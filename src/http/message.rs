@@ -222,6 +222,7 @@ pub enum HeaderName {
     Connection,
     Cookie,
     ContentEncoding,
+    ContentLanguage,
     ContentLength,
     ContentSecurityPolicy,
     ContentSecurityPolicyReportOnly,
@@ -288,6 +289,7 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
     UniCase::ascii("cookie") => HeaderName::Cookie,
     UniCase::ascii("content-encoding") => HeaderName::ContentEncoding,
     UniCase::ascii("content-length") => HeaderName::ContentLength,
+    UniCase::ascii("content-language") => HeaderName::ContentLanguage,
     UniCase::ascii("content-security-policy") => HeaderName::ContentSecurityPolicy,
     UniCase::ascii("content-security-policy-report-only") => HeaderName::ContentSecurityPolicyReportOnly,
     UniCase::ascii("content-type") => HeaderName::ContentType,
@@ -344,6 +346,10 @@ impl HeaderName {
             Some(header_name) => header_name.clone(),
             None => {
                 let mut string = string;
+
+                #[cfg(debug_assertions)]
+                println!("[DEBUG] Unknown header name: {}", string);
+
                 string.make_ascii_lowercase();
                 HeaderName::Other(string)
             }
@@ -367,6 +373,7 @@ impl HeaderName {
             HeaderName::Connection => "Connection",
             HeaderName::Cookie => "Cookie",
             HeaderName::ContentEncoding => "Content-Encoding",
+            HeaderName::ContentLanguage => "Content-Language",
             HeaderName::ContentLength => "Content-Length",
             HeaderName::ContentSecurityPolicy => "Content-Security-Policy",
             HeaderName::ContentSecurityPolicyReportOnly => "Content-Security-Policy-Report-Only",
