@@ -13,7 +13,7 @@ use std::{io, sync::Arc, time::{SystemTime, Duration}, env::current_dir, path::P
 use crate::{
     http::{
         message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind, StatusCodeClass, HeaderValue},
-        error::HttpParseError, hints::SecFetchDest,
+        error::HttpParseError, hints::{SecFetchDest, AcceptedLanguages},
     },
     resources::{MediaType, static_res},
 };
@@ -257,15 +257,8 @@ async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response
             }
         }
 
-        // Show the welcome page.
-        // TODO: support 304 caching.
-        if request_target == "/" || request_target == "/index.html" {
-            let mut response = Response::with_status(StatusCode::Ok);
-            response.headers.set_content_type(MediaType::HTML);
-            response.headers.set(HeaderName::CacheControl, "public, max-age=600".into());
-            response.headers.set(HeaderName::ContentSecurityPolicy, "default-src 'self'; upgrade-insecure-requests; style-src-elem 'self' 'unsafe-inline'".into());
-            response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML));
-            return Ok(response);
+        if !root.join("/index.html").exists() {
+            return handle_welcome_page(request, request_target).await;
         }
 
         return Ok(Response::with_status_and_string_body(StatusCode::NotFound, "Not Found"));
@@ -273,6 +266,36 @@ async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response
 
     _ = stream;
     Ok(Response::with_status_and_string_body(StatusCode::BadRequest, "Invalid Target"))
+}
+
+async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<Response, Error> {
+    let mut response = Response::with_status(StatusCode::Ok);
+    response.headers.set_content_type(MediaType::HTML);
+    response.headers.set(HeaderName::CacheControl, "public, max-age=600".into());
+    response.headers.set(HeaderName::ContentSecurityPolicy, "default-src 'self'; upgrade-insecure-requests; style-src-elem 'self' 'unsafe-inline'".into());
+
+    response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML));
+
+    match request_target {
+        "/" | "/index" | "/index.html" => {
+            if let Some(accepted_languages) = request.headers.get(&HeaderName::AcceptLanguage) {
+                if let Some(accepted_languages) = AcceptedLanguages::parse(accepted_languages.as_str_no_convert().unwrap()) {
+                    if let Some(best) = accepted_languages.match_best(vec!["nl", "en"]) {
+                        if best == "nl" {
+                            response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML_NL));
+                        }
+                    }
+                }
+            }
+        }
+        "/welcome.en.html" => (),
+        "/welcome.nl.html" => {
+            response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML_NL));
+        }
+        _ => return Ok(Response::with_status_and_string_body(StatusCode::NotFound, "Not Found")),
+    }
+
+    return Ok(response);
 }
 
 async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
