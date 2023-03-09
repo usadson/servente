@@ -1,6 +1,8 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod static_res;
+
 use phf::phf_map;
 use unicase::UniCase;
 

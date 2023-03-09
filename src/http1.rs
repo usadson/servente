@@ -15,7 +15,7 @@ use crate::{
         message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind, StatusCodeClass, HeaderValue},
         error::HttpParseError, hints::SecFetchDest,
     },
-    resources::MediaType,
+    resources::{MediaType, static_res},
 };
 
 const TRANSFER_ENCODING_THRESHOLD: u64 = 1024 * 1024; // 1 MiB
@@ -173,7 +173,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W) -> Result<(), io:
         Err(error) => {
             println!("{:?}>: {:?} => {:?}", request.method, request.target, error);
             let mut response = Response::with_status_and_string_body(StatusCode::InternalServerError, String::from("Internal Server Error"));
-            finish_response_error(&mut response).await.unwrap();
+            finish_response_error(&mut response).await?;
             response
         }
     };
@@ -254,6 +254,17 @@ async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response
 
                 return Ok(response);
             }
+        }
+
+        // Show the welcome page.
+        // TODO: support 304 caching.
+        if request_target == "/" || request_target == "/index.html" {
+            let mut response = Response::with_status(StatusCode::Ok);
+            response.headers.set_content_type(MediaType::HTML);
+            response.headers.set(HeaderName::CacheControl, "public, max-age=600".into());
+            response.headers.set(HeaderName::ContentSecurityPolicy, "default-src 'self'; upgrade-insecure-requests; style-src-elem 'self' 'unsafe-inline'".into());
+            response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML));
+            return Ok(response);
         }
 
         return Ok(Response::with_status_and_string_body(StatusCode::NotFound, "Not Found"));

@@ -592,14 +592,18 @@ impl HeaderMap {
 // Header-specific methods
 //
 impl HeaderMap {
-    pub fn set_content_length(&mut self, length: usize) {
-        self.set(HeaderName::ContentLength, HeaderValue::Size(length));
-    }
-
     pub fn sec_fetch_dest(&self) -> Option<SecFetchDest> {
         self.get(&HeaderName::SecFetchDest)
             .and_then(|value| value.as_str_no_convert())
             .and_then(|string| SecFetchDest::parse(string))
+    }
+
+    pub fn set_content_length(&mut self, length: usize) {
+        self.set(HeaderName::ContentLength, HeaderValue::Size(length));
+    }
+
+    pub fn set_content_type(&mut self, media_type: MediaType) {
+        self.set(HeaderName::ContentType, HeaderValue::MediaType(media_type));
     }
 }
 
