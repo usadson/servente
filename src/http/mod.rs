@@ -5,3 +5,4 @@ pub mod error;
 pub mod hints;
 pub mod message;
 pub mod v1;
+pub mod v3;

@@ -202,6 +202,7 @@ async fn finish_response_general(response: &mut Response) -> Result<(), io::Erro
     }
 
     response.headers.set(HeaderName::Server, HeaderValue::from("servente"));
+    response.headers.set(HeaderName::AltSvc, HeaderValue::from("h2=\":8080\", h3=\":8080\""));
 
     if !response.headers.contains(&HeaderName::Connection) {
         response.headers.set(HeaderName::Connection, HeaderValue::from("keep-alive"));
