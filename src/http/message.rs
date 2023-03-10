@@ -224,6 +224,7 @@ pub enum HeaderName {
     ContentEncoding,
     ContentLanguage,
     ContentLength,
+    ContentRange,
     ContentSecurityPolicy,
     ContentSecurityPolicyReportOnly,
     ContentType,
@@ -242,6 +243,7 @@ pub enum HeaderName {
     ProxyStatus,
     Origin,
     Pragma,
+    Range,
     Referer,
     ReferrerPolicy,
     SecChUa,
@@ -290,6 +292,7 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
     UniCase::ascii("content-encoding") => HeaderName::ContentEncoding,
     UniCase::ascii("content-length") => HeaderName::ContentLength,
     UniCase::ascii("content-language") => HeaderName::ContentLanguage,
+    UniCase::ascii("content-range") => HeaderName::ContentRange,
     UniCase::ascii("content-security-policy") => HeaderName::ContentSecurityPolicy,
     UniCase::ascii("content-security-policy-report-only") => HeaderName::ContentSecurityPolicyReportOnly,
     UniCase::ascii("content-type") => HeaderName::ContentType,
@@ -308,6 +311,7 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
     UniCase::ascii("origin") => HeaderName::Origin,
     UniCase::ascii("pragma") => HeaderName::Pragma,
     UniCase::ascii("proxy-status") => HeaderName::ProxyStatus,
+    UniCase::ascii("range") => HeaderName::Range,
     UniCase::ascii("referer") => HeaderName::Referer,
     UniCase::ascii("referrer-policy") => HeaderName::ReferrerPolicy,
     UniCase::ascii("sec-ch-ua") => HeaderName::SecChUa,
@@ -347,9 +351,6 @@ impl HeaderName {
             None => {
                 let mut string = string;
 
-                #[cfg(debug_assertions)]
-                println!("[DEBUG] Unknown header name: {}", string);
-
                 string.make_ascii_lowercase();
                 HeaderName::Other(string)
             }
@@ -375,6 +376,7 @@ impl HeaderName {
             HeaderName::ContentEncoding => "Content-Encoding",
             HeaderName::ContentLanguage => "Content-Language",
             HeaderName::ContentLength => "Content-Length",
+            HeaderName::ContentRange => "Content-Range",
             HeaderName::ContentSecurityPolicy => "Content-Security-Policy",
             HeaderName::ContentSecurityPolicyReportOnly => "Content-Security-Policy-Report-Only",
             HeaderName::ContentType => "Content-Type",
@@ -393,6 +395,7 @@ impl HeaderName {
             HeaderName::Origin => "Origin",
             HeaderName::Pragma => "Pragma",
             HeaderName::ProxyStatus => "Proxy-Status",
+            HeaderName::Range => "Range",
             HeaderName::Referer => "Referer",
             HeaderName::ReferrerPolicy => "Referrer-Policy",
             HeaderName::SecChUa => "Sec-Ch-Ua",
@@ -446,6 +449,7 @@ impl HeaderName {
 pub enum HeaderValue {
     StaticString(&'static str),
     String(String),
+    ContentRange(ContentRangeHeaderValue),
     DateTime(SystemTime),
     MediaType(MediaType),
     SecFetchDest(SecFetchDest),
@@ -470,6 +474,23 @@ impl HeaderValue {
             }
             HeaderValue::String(string) => {
                 response_text.push_str(string);
+            }
+            HeaderValue::ContentRange(content_range) => {
+                response_text.push_str(&match content_range {
+                    ContentRangeHeaderValue::Range { start, end, complete_length } => {
+                        debug_assert!(start < end, "`start` must be less than `end` for Content-Range");
+                        match complete_length {
+                            Some(complete_length) => {
+                                debug_assert!(end < complete_length, "`end` must be less than `complete_length` for Content-Range");
+                                format!("bytes {}-{}/{}", start, end, complete_length)
+                            }
+                            None => format!("bytes {}-{}/*", start, end),
+                        }
+                    }
+                    ContentRangeHeaderValue::Unsatisfied { complete_length } => {
+                        format!("bytes */{}", complete_length)
+                    }
+                });
             }
             HeaderValue::DateTime(date_time) => {
                 response_text.push_str(&httpdate::fmt_http_date(*date_time));
@@ -607,6 +628,10 @@ impl HeaderMap {
 
     pub fn set_content_length(&mut self, length: usize) {
         self.set(HeaderName::ContentLength, HeaderValue::Size(length));
+    }
+
+    pub fn set_content_range(&mut self, range: ContentRangeHeaderValue) {
+        self.set(HeaderName::ContentRange, HeaderValue::ContentRange(range));
     }
 
     pub fn set_content_type(&mut self, media_type: MediaType) {
@@ -802,4 +827,94 @@ impl Response {
         response.body = Some(BodyKind::StaticString(message));
         response
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Range {
+    Full,
+    StartPointToEnd { start: u64 },
+    Points {
+        start: u64,
+        end: u64,
+    },
+    Suffix { suffix: u64 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpRangeList {
+    pub ranges: Vec<Range>,
+}
+
+impl HttpRangeList {
+    pub fn parse(value: &str) -> Option<Self> {
+        if !value.starts_with("bytes=") {
+            return None;
+        }
+        let mut ranges = Vec::new();
+        for range in value[6..].split(',') {
+            let range = range.trim();
+            if range.is_empty() {
+                continue;
+            }
+            let range = if range.starts_with('-') {
+                let suffix = range[1..].parse().ok()?;
+                Range::Suffix { suffix }
+            } else if range.ends_with('-') {
+                let start = range[..range.len() - 1].parse().ok()?;
+                Range::StartPointToEnd { start }
+            } else {
+                let mut range = range.splitn(2, '-');
+                let start = range.next()?.parse().ok()?;
+                let end = range.next()?.parse().ok()?;
+                Range::Points { start, end }
+            };
+            ranges.push(range);
+        }
+        Some(Self { ranges })
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Range> {
+        self.ranges.iter()
+    }
+}
+
+/// The `Content-Range` header field indicates where in a full body a partial
+/// message belongs.
+///
+/// ### References
+/// * [RFC 9110](https://httpwg.org/specs/rfc9110.html#field.content-range)
+/// * [MDN `Content-Range` header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range)
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ContentRangeHeaderValue {
+    Range {
+        /// The start of the range, inclusive.
+        start: usize,
+
+        /// The end of the range, inclusive.
+        end: usize,
+
+        /// Complete length of the **resource**, not the body.
+        complete_length: Option<usize>,
+    },
+
+    /// Used for 416 Range Not Satisfiable.
+    ///
+    /// ### RFC 9110, section 14.4:
+    /// > A server generating a 416 (Range Not Satisfiable) response to a
+    /// byte-range request SHOULD send a Content-Range header field with an
+    /// unsatisfied-range value, as in the following example:
+    /// > ```
+    /// > Content-Range: bytes */1234`
+    /// > ```
+    /// > The complete-length in a 416 response indicates the current length of
+    /// > the selected representation.
+    ///
+    /// ### References
+    /// * [MDN `416 Range Not Satisfiable` HTTP status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416)
+    /// * [MDN `Content-Range` header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range)
+    /// * [RFC 9110](https://httpwg.org/specs/rfc9110.html#field.content-range)
+    Unsatisfied {
+        /// The complete length of the resource.
+        complete_length: usize
+    },
 }

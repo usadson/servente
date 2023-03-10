@@ -1,6 +1,6 @@
 use tokio::{
     net::{TcpListener, TcpStream},
-    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter}, time::Instant,
+    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt}, time::Instant,
 };
 
 use rustls::{
@@ -8,11 +8,11 @@ use rustls::{
 };
 use tokio_rustls::TlsAcceptor;
 
-use std::{io, sync::Arc, time::{SystemTime, Duration}, env::current_dir, path::Path, fs};
+use std::{io::{self, SeekFrom}, sync::Arc, time::{SystemTime, Duration}, env::current_dir, path::Path, fs};
 
 use crate::{
     http::{
-        message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind, StatusCodeClass, HeaderValue},
+        message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind, StatusCodeClass, HeaderValue, HttpRangeList, Range, ContentRangeHeaderValue},
         error::HttpParseError, hints::{SecFetchDest, AcceptedLanguages},
     },
     resources::{MediaType, static_res},
@@ -51,6 +51,13 @@ impl MaximumLength {
     pub const HEADER: MaximumLength = MaximumLength(4096);
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransferStrategy {
+    Chunked,
+    Full,
+    Ranges { ranges: HttpRangeList },
+}
+
 /// Checks if the request is not modified and returns a 304 response if it isn't.
 async fn check_not_modified(request: &Request, _path: &Path, metadata: &fs::Metadata) -> Result<Option<Response>, io::Error> {
     if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
@@ -87,6 +94,83 @@ async fn consume_crlf<R>(stream: &mut R) -> Result<(), Error>
     }
 
     Ok(())
+}
+
+async fn determine_transfer_strategy(response: &mut Response, ranges: Option<HttpRangeList>) -> TransferStrategy {
+    let Some(body) = &response.body else {
+        if response.status.class() != StatusCodeClass::Informational {
+            response.headers.set_content_length(0);
+        }
+        return TransferStrategy::Full;
+    };
+
+    match body {
+        BodyKind::File(file) => {
+            let file_size = file.metadata().await.unwrap().len();
+            if let Some(ranges) = ranges {
+                response.status = StatusCode::PartialContent;
+                if ranges.ranges.len() == 1 {
+                    match ranges.ranges.first().unwrap() {
+                        Range::Full => {
+                            response.headers.set_content_range(ContentRangeHeaderValue::Range {
+                                start: 0,
+                                end: (file_size - 1) as _,
+                                complete_length: Some(file_size as _),
+                            });
+                        }
+                        Range::Points { start, end } => {
+                            response.headers.set_content_range(ContentRangeHeaderValue::Range {
+                                start: *start as _,
+                                end: *end as _,
+                                complete_length: Some(file_size as _),
+                            });
+                        }
+                        Range::StartPointToEnd { start } => {
+                            response.headers.set_content_range(ContentRangeHeaderValue::Range {
+                                start: *start as _,
+                                end: (file_size - 1) as _,
+                                complete_length: Some(file_size as _),
+                            });
+                        }
+                        Range::Suffix { suffix } => {
+                            response.headers.set_content_range(ContentRangeHeaderValue::Range {
+                                start: (file_size - suffix) as _,
+                                end: (file_size - 1) as _,
+                                complete_length: Some(file_size as _),
+                            });
+                        }
+                    }
+                } else {
+                    todo!();
+                }
+
+                return TransferStrategy::Ranges { ranges };
+            }
+
+            if file_size > TRANSFER_ENCODING_THRESHOLD {
+                response.headers.set(HeaderName::TransferEncoding, "chunked".into());
+                return TransferStrategy::Chunked;
+            }
+
+            response.headers.set_content_length(file_size as _);
+            TransferStrategy::Full
+        }
+
+        BodyKind::Bytes(bytes) => {
+            response.headers.set_content_length(bytes.len());
+            TransferStrategy::Full
+        }
+
+        BodyKind::StaticString(string) => {
+            response.headers.set_content_length(string.len());
+            TransferStrategy::Full
+        }
+
+        BodyKind::String(string) => {
+            response.headers.set_content_length(string.len());
+            TransferStrategy::Full
+        }
+    }
 }
 
 async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
@@ -157,7 +241,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W) -> Result<(), io:
                 Error::ParseError(error) => {
                     let mut response = handle_parse_error(error).await;
                     finish_response_error(&mut response).await.unwrap();
-                    send_response(writer, response).await?;
+                    send_response(writer, response, None).await?;
                     return Err(io::Error::new(io::ErrorKind::InvalidData, "Parse error"));
                 }
                 Error::Other(error) => {
@@ -180,11 +264,15 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W) -> Result<(), io:
     finish_response_normal(&request, &mut response).await?;
 
     for response in response.prelude_response {
-        send_response(writer, response).await?;
+        send_response(writer, response, None).await?;
     }
     response.prelude_response = Vec::new();
 
-    let sent_body = send_response(writer, response).await?;
+    let sent_body = send_response(writer, response,
+        request.headers.get(&HeaderName::Range)
+                .and_then(|range| range.as_str_no_convert())
+                .and_then(|range| HttpRangeList::parse(range))
+    ).await?;
 
     println!("{:?}>: {:?} (f={}ms, h={}ms, b={}ms)", request.method, request.target, start_full.elapsed().as_millis(), start_handling.elapsed().as_millis(), sent_body.as_millis());
 
@@ -367,7 +455,12 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         let name = parts.next().unwrap().trim().to_string();
         let value = parts.next().unwrap().trim().to_string();
 
-        headers.push((HeaderName::from_str(name), HeaderValue::from(value)));
+        let name = HeaderName::from_str(name);
+        if let HeaderName::Other(name) = &name {
+            #[cfg(debug_assertions)]
+            println!("[DEBUG] Unknown header name: \"{}\" with value: \"{}\"", name, value);
+        }
+        headers.push((name, HeaderValue::from(value)));
     }
 }
 
@@ -465,31 +558,9 @@ async fn send_http_upgrade(stream: &mut TcpStream) -> Result<(), io::Error> {
     Ok(())
 }
 
-async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<Duration, io::Error>
+async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option<HttpRangeList>) -> Result<Duration, io::Error>
         where R: AsyncWriteExt + Unpin {
-    let mut use_transfer_encoding = false;
-    if let Some(body) = &response.body {
-        match body {
-            BodyKind::File(file) => {
-                let len = file.metadata().await.unwrap().len();
-                if len > TRANSFER_ENCODING_THRESHOLD {
-                    use_transfer_encoding = true;
-                    response.headers.set(HeaderName::TransferEncoding, "chunked".into());
-                } else {
-                    response.headers.set_content_length(len as _);
-                }
-            }
-            BodyKind::Bytes(bytes) => {
-                response.headers.set_content_length(bytes.len());
-            }
-            BodyKind::StaticString(string) => {
-                response.headers.set_content_length(string.len());
-            }
-            BodyKind::String(string) => {
-                response.headers.set_content_length(string.len());
-            }
-        }
-    }
+    let transfer_strategy = determine_transfer_strategy(&mut response, ranges).await;
 
     let mut response_text = String::with_capacity(1024);
     response_text.push_str("HTTP/1.1 ");
@@ -512,25 +583,12 @@ async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<Dura
     if let Some(response) = response.body {
         match response {
             BodyKind::File(mut response) => {
-                if use_transfer_encoding {
-                    let mut buf: [u8; 16384] = [0; 16384];
-                    loop {
-                        let len = response.read(&mut buf).await?;
-
-                        if len == 0 {
-                            break;
-                        }
-
-                        stream.write_all(format!("{:X}\r\n", len).as_bytes()).await?;
-
-                        stream.write_all(&buf[0..len]).await?;
-
-                        stream.write_all(b"\r\n").await?;
+                match transfer_strategy {
+                    TransferStrategy::Full => transfer_body_full(stream, &mut response).await?,
+                    TransferStrategy::Chunked => transfer_body_chunked(stream, &mut response).await?,
+                    TransferStrategy::Ranges { ranges } => {
+                        transfer_body_ranges(stream, &mut response, ranges).await?
                     }
-
-                    stream.write_all(b"0\r\n\r\n").await?;
-                } else {
-                    tokio::io::copy(&mut response, stream).await?;
                 }
             }
             BodyKind::Bytes(response) => stream.write_all(&response).await?,
@@ -541,6 +599,7 @@ async fn send_response<R>(stream: &mut R, mut response: Response) -> Result<Dura
     _ = stream.flush().await;
     Ok(start.elapsed())
 }
+
 
 pub async fn start(address: &str, tls_config: Arc<ServerConfig>) -> io::Result<()> {
     let listener = TcpListener::bind(address).await?;
@@ -553,4 +612,94 @@ pub async fn start(address: &str, tls_config: Arc<ServerConfig>) -> io::Result<(
             process_socket(stream, tls_config).await;
         });
     }
+}
+
+async fn transfer_body_chunked<O, I>(output: &mut O, input: &mut I) -> Result<(), io::Error>
+        where O: AsyncWriteExt + Unpin,
+              I: AsyncReadExt + Unpin {
+    let mut buf: [u8; 16384] = [0; 16384];
+    loop {
+        let len = input.read(&mut buf).await?;
+
+        if len == 0 {
+            break;
+        }
+
+        output.write_all(format!("{:X}\r\n", len).as_bytes()).await?;
+
+        output.write_all(&buf[0..len]).await?;
+
+        output.write_all(b"\r\n").await?;
+    }
+
+    output.write_all(b"0\r\n\r\n").await?;
+
+    Ok(())
+}
+
+async fn transfer_body_full<O, I>(output: &mut O, input: &mut I) -> Result<(), io::Error>
+        where O: AsyncWriteExt + Unpin,
+              I: AsyncReadExt + Unpin {
+    tokio::io::copy(input, output).await?;
+    Ok(())
+}
+
+async fn transfer_body_ranges<O, I>(output: &mut O, input: &mut I, ranges: HttpRangeList) -> Result<(), io::Error>
+        where O: AsyncWriteExt + Unpin,
+              I: AsyncReadExt + AsyncSeekExt + Unpin {
+    for range in ranges.iter() {
+        match range {
+            Range::Full => {
+                return transfer_body_full(output, input).await;
+            }
+            Range::StartPointToEnd { start } => {
+                let mut buf: [u8; 8192] = [0; 8192];
+                input.seek(SeekFrom::Start(*start as _)).await?;
+                loop {
+                    let len = input.read(&mut buf).await?;
+
+                    if len == 0 {
+                        break;
+                    }
+
+                    output.write_all(&buf[0..len]).await?;
+                }
+            }
+            Range::Points { start, end } => {
+                let mut buf: [u8; 8192] = [0; 8192];
+                input.seek(SeekFrom::Start(*start as _)).await?;
+                let mut remaining = (end - start) as usize;
+                while remaining > 0 {
+                    let len = input.read(&mut buf).await?;
+
+                    if len == 0 {
+                        break;
+                    }
+
+                    let len = std::cmp::min(len, remaining);
+                    output.write_all(&buf[0..len]).await?;
+                    remaining -= len;
+                }
+            }
+            Range::Suffix { suffix } => {
+                let mut buf: [u8; 8192] = [0; 8192];
+                let len = input.seek(SeekFrom::End(0)).await?;
+                let start = (len - *suffix) as usize;
+                input.seek(SeekFrom::Start(start as _)).await?;
+                let mut remaining = *suffix as _;
+                while remaining > 0 {
+                    let len = input.read(&mut buf).await?;
+
+                    if len == 0 {
+                        break;
+                    }
+
+                    let len = std::cmp::min(len, remaining);
+                    output.write_all(&buf[0..len]).await?;
+                    remaining -= len;
+                }
+            }
+        }
+    }
+    Ok(())
 }
