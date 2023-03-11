@@ -687,7 +687,7 @@ impl HeaderMap {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Method {
     Other(String),
     Acl,
@@ -805,7 +805,7 @@ impl RequestTarget {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Request {
     pub method: Method,
     pub target: RequestTarget,

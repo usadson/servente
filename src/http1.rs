@@ -3,19 +3,22 @@ use tokio::{
     task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt}, time::Instant,
 };
 
-use rustls::{
-    ServerConfig
-};
 use tokio_rustls::TlsAcceptor;
 
-use std::{io::{self, SeekFrom}, sync::Arc, time::{SystemTime, Duration}, env::current_dir, path::Path, fs};
+use std::{
+    env::current_dir,
+    fs,
+    io::{self, SeekFrom},
+    path::Path,
+    time::{SystemTime, Duration},
+};
 
 use crate::{
     http::{
         message::{Request, Method, RequestTarget, HttpVersion, HeaderMap, HeaderName, Response, StatusCode, BodyKind, StatusCodeClass, HeaderValue, HttpRangeList, Range, ContentRangeHeaderValue},
         error::HttpParseError, hints::{SecFetchDest, AcceptedLanguages},
     },
-    resources::{MediaType, static_res},
+    resources::{MediaType, static_res}, ServenteConfig,
 };
 
 const TRANSFER_ENCODING_THRESHOLD: u64 = 1024 * 1024; // 1 MiB
@@ -231,7 +234,7 @@ async fn finish_response_normal(request: &Request, response: &mut Response) -> R
     finish_response_general(response).await
 }
 
-async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W) -> Result<(), io::Error>
+async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &ServenteConfig) -> Result<(), io::Error>
         where R: AsyncBufReadExt + Unpin, W: AsyncWriteExt + Unpin {
     let start_full = Instant::now();
 
@@ -253,7 +256,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W) -> Result<(), io:
     };
 
     let start_handling = Instant::now();
-    let mut response = match handle_request(reader, &request).await {
+    let mut response = match handle_request(reader, &request, config).await {
         Ok(response) => response,
         Err(error) => {
             println!("{:?}>: {:?} => {:?}", request.method, request.target, error);
@@ -291,8 +294,13 @@ async fn handle_parse_error(error: HttpParseError) -> Response {
     }
 }
 
-async fn handle_request<R>(stream: &mut R, request: &Request) -> Result<Response, Error>
+async fn handle_request<R>(stream: &mut R, request: &Request, config: &ServenteConfig) -> Result<Response, Error>
         where R: AsyncBufReadExt + Unpin {
+    let controller = config.handler_controller.clone();
+    if let Some(result) = controller.check_handle(&request) {
+        return result.map_err(|error| Error::Other(io::Error::new(io::ErrorKind::Other, error)));
+    }
+
     if let RequestTarget::Origin { path, .. } = &request.target {
         let request_target = path.as_str();
         if request.method != Method::Get {
@@ -390,7 +398,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
     return Ok(response);
 }
 
-async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
+async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
     println!("Client connected: {}", stream.peer_addr().unwrap());
     let mut buf = [0u8; 4];
     if let Ok(length) = stream.peek(&mut buf).await {
@@ -404,7 +412,7 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
         }
     }
 
-    let acceptor = TlsAcceptor::from(tls_config);
+    let acceptor = TlsAcceptor::from(config.tls_config.clone());
     let stream = match acceptor.accept(stream).await {
         Ok(stream) => stream,
         Err(_) => return,
@@ -415,7 +423,7 @@ async fn process_socket(mut stream: TcpStream, tls_config: Arc<ServerConfig>) {
     let mut writer = BufWriter::new(writer);
 
     loop {
-        if let Err(e) = handle_exchange(&mut reader, &mut writer).await {
+        if let Err(e) = handle_exchange(&mut reader, &mut writer, &config).await {
             println!("Client Error: {:?}", e);
             return;
         }
@@ -602,15 +610,15 @@ async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option
 }
 
 
-pub async fn start(address: &str, tls_config: Arc<ServerConfig>) -> io::Result<()> {
+pub async fn start(address: &str, config: ServenteConfig) -> io::Result<()> {
     let listener = TcpListener::bind(address).await?;
     println!("Started listening on {}", address);
 
     loop {
         let (stream, _) = listener.accept().await?;
-        let tls_config = Arc::clone(&tls_config);
-        task::spawn(async {
-            process_socket(stream, tls_config).await;
+        let config = config.clone();
+        task::spawn(async move {
+            process_socket(stream, config.clone()).await;
         });
     }
 }
