@@ -193,6 +193,18 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
 }
 
 async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<Response, Error> {
+    if let Some(modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
+        if let Some(modified_since) = modified_since.as_str_no_convert() {
+            if let Ok(modified_since) = httpdate::parse_http_date(modified_since) {
+                if SystemTime::UNIX_EPOCH.duration_since(modified_since).unwrap().as_secs() < 600 {
+                    let mut response = Response::with_status(StatusCode::NotModified);
+                    response.headers.set(HeaderName::Vary, "Content-Language".into());
+                    return Ok(response);
+                }
+            }
+        }
+    }
+
     let mut response = Response::with_status(StatusCode::Ok);
     response.headers.set_content_type(MediaType::HTML);
     response.headers.set(HeaderName::CacheControl, "public, max-age=600".into());
@@ -200,6 +212,8 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
 
     response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML));
     response.headers.set(HeaderName::ContentLanguage, "en".into());
+    response.headers.set(HeaderName::LastModified, HeaderValue::from(SystemTime::UNIX_EPOCH));
+    response.headers.set(HeaderName::Vary, "Content-Language".into());
 
     match request_target {
         "/" | "/index" | "/index.html" => {
