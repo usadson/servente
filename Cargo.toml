@@ -25,6 +25,7 @@ quinn = { version = "*", features = ["rustls"], optional = true }
 
 [features]
 default = []
+debugging = []
 http3 = ["dep:quinn"]
 
 [profile.release]

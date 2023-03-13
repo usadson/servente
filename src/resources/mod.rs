@@ -99,7 +99,7 @@ impl MediaType {
     }
 
     pub fn from_path(path: &str) -> &'static MediaType {
-        let extension = path.rsplitn(2, '.').next().unwrap_or("");
+        let extension = path.rsplit('.').next().unwrap_or("");
         MediaType::from_extension(extension)
     }
 }

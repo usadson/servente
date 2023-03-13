@@ -41,7 +41,7 @@ impl HandlerController {
             });
 
             match handled {
-                Some(response) => return Some(response),
+                Some(response) => Some(response),
                 None => Some(Ok(Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed"))),
             }
         } else {

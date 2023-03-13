@@ -10,7 +10,7 @@ pub struct CertificateData {
 }
 
 fn load_data_from_vec_u8(certificate: Vec<u8>, private_key: Vec<u8>) -> CertificateData{
-    return CertificateData {
+    CertificateData {
         certs: vec![Certificate(certificate)],
         private_key: PrivateKey(private_key),
     }

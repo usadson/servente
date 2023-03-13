@@ -169,7 +169,7 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
     let mut buffer = BufReader::new(stream);
     loop {
         let line = read_crlf_line(&mut buffer, MaximumLength::HEADER).await?;
-        if line.len() == 0 {
+        if line.is_empty() {
             return Ok(());
         }
     }
@@ -179,6 +179,7 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
 /// client.
 async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &ServenteConfig) -> Result<(), io::Error>
         where R: AsyncBufReadExt + Unpin, W: AsyncWriteExt + Unpin {
+    #[cfg(feature = "debugging")]
     let start_full = Instant::now();
 
     let mut request = match read_request_excluding_body(reader).await {
@@ -213,6 +214,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
         }
     }
 
+    #[cfg(feature = "debugging")]
     let start_handling = Instant::now();
     let mut response = match handle_request(&request, config).await {
         Ok(response) => response,
@@ -233,10 +235,14 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
     let sent_body = send_response(writer, response,
         request.headers.get(&HeaderName::Range)
                 .and_then(|range| range.as_str_no_convert())
-                .and_then(|range| HttpRangeList::parse(range))
+                .and_then(HttpRangeList::parse)
     ).await?;
 
-    //println!("{:?}>: {:?} (f={}ms, h={}ms, b={}ms)", request.method, request.target, start_full.elapsed().as_millis(), start_handling.elapsed().as_millis(), sent_body.as_millis());
+    #[cfg(feature = "debugging")]
+    println!("{:?}>: {:?} (f={}ms, h={}ms, b={}ms)", request.method, request.target, start_full.elapsed().as_millis(), start_handling.elapsed().as_millis(), sent_body.as_millis());
+
+    #[cfg(not(feature = "debugging"))]
+    { _ = sent_body }
 
     Ok(())
 }
@@ -248,7 +254,11 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
     if let Ok(length) = stream.peek(&mut buf).await {
         if length >= 3 && &buf[0..3] == b"GET" {
             if let Err(e) = discard_request(&mut stream).await {
-                //println!("Client Error discarding non-HTTPS: {:?}", e);
+                #[cfg(feature = "debugging")]
+                println!("Client Error discarding non-HTTPS: {:?}", e);
+
+                #[cfg(not(feature = "debugging"))]
+                { _ = e }
                 return;
             }
 
@@ -268,7 +278,11 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
 
     loop {
         if let Err(e) = handle_exchange(&mut reader, &mut writer, &config).await {
-            //println!("Client Error: {:?}", e);
+            #[cfg(feature = "debugging")]
+            println!("Client Error: {:?}", e);
+
+            #[cfg(not(feature = "debugging"))]
+            { _ = e }
             return;
         }
     }
@@ -281,9 +295,9 @@ async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Res
 
     while string.len() < maximum_length.0 {
         let byte = stream.read_u8().await?;
-        if byte == '\r' as u8 {
+        if byte == b'\r' {
             let byte = stream.read_u8().await?;
-            if byte == '\n' as u8 {
+            if byte == b'\n' {
                 return Ok(string);
             }
             return Err(Error::ParseError(HttpParseError::InvalidCRLF));
@@ -302,7 +316,7 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
 
     loop {
         let line = read_crlf_line(stream, MaximumLength::HEADER).await?;
-        if line.len() == 0 {
+        if line.is_empty() {
             return Ok(HeaderMap::new_with_vec(headers));
         }
 
@@ -412,7 +426,7 @@ async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error
 async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), Error>
         where R: AsyncBufReadExt + Unpin {
 
-    let method = Method::from_str(read_string_until_character(stream, ' ' as u8, MaximumLength::METHOD, HttpParseError::MethodTooLarge).await?);
+    let method = Method::from_str(read_string_until_character(stream, b' ', MaximumLength::METHOD, HttpParseError::MethodTooLarge).await?);
 
     // TODO skip OWS
     let target = read_request_target(stream).await?;
@@ -431,13 +445,13 @@ async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, 
 /// * [RFC 9112, Section 3.2. Request Target](https://www.rfc-editor.org/rfc/rfc9112.html#name-request-target)
 async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
         where R: AsyncBufReadExt + Unpin {
-    let str = read_string_until_character(stream, ' ' as u8, MaximumLength::REQUEST_TARGET, HttpParseError::RequestTargetTooLarge).await?;
+    let str = read_string_until_character(stream, b' ', MaximumLength::REQUEST_TARGET, HttpParseError::RequestTargetTooLarge).await?;
 
     if str == "*" {
         return Ok(RequestTarget::Asterisk);
     }
 
-    if str.starts_with("/") {
+    if str.starts_with('/') {
         let mut parts = str.splitn(2, '?');
         return Ok(RequestTarget::Origin {
             path: parts.next().unwrap().to_string(),
@@ -471,7 +485,7 @@ async fn send_http_upgrade(stream: &mut TcpStream) -> Result<(), io::Error> {
         ),
         body.len(), body
     );
-    _ = stream.write_all(message.as_bytes()).await?;
+    stream.write_all(message.as_bytes()).await?;
     stream.flush().await?;
     Ok(())
 }

@@ -620,14 +620,14 @@ impl TryInto<SystemTime> for &HeaderValue {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct HeaderMap {
     headers: Vec<(HeaderName, HeaderValue)>,
 }
 
 impl HeaderMap {
     pub fn new() -> HeaderMap {
-        HeaderMap { headers: Vec::new() }
+        HeaderMap::default()
     }
 
     pub fn new_with_vec(headers: Vec<(HeaderName, HeaderValue)>) -> HeaderMap {
@@ -685,7 +685,7 @@ impl HeaderMap {
     pub fn sec_fetch_dest(&self) -> Option<SecFetchDest> {
         self.get(&HeaderName::SecFetchDest)
             .and_then(|value| value.as_str_no_convert())
-            .and_then(|string| SecFetchDest::parse(string))
+            .and_then(SecFetchDest::parse)
     }
 
     pub fn set_content_length(&mut self, length: usize) {
@@ -927,12 +927,10 @@ impl HttpRangeList {
             if range.is_empty() {
                 continue;
             }
-            let range = if range.starts_with('-') {
-                let suffix = range[1..].parse().ok()?;
-                Range::Suffix { suffix }
-            } else if range.ends_with('-') {
-                let start = range[..range.len() - 1].parse().ok()?;
-                Range::StartPointToEnd { start }
+            let range = if let Some(suffix) = range.strip_prefix('-') {
+                Range::Suffix { suffix: suffix.parse().ok()? }
+            } else if let Some(start) = range.strip_suffix('-') {
+                Range::StartPointToEnd { start: start.parse().ok()? }
             } else {
                 let mut range = range.splitn(2, '-');
                 let start = range.next()?.parse().ok()?;

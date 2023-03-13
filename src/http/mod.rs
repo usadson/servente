@@ -77,33 +77,32 @@ async fn check_not_modified(request: &Request, path: &Path, metadata: &fs::Metad
 
         if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
             if let Ok(if_modified_since_date) = if_modified_since.try_into() {
-                match modified_date.duration_since(if_modified_since_date) {
-                    Ok(duration) => {
-                        if duration.as_secs() == 0 {
-                            let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
-                            response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
-                            response.headers.set(HeaderName::LastModified, if_modified_since.to_owned());
-                            return Ok(Some(response));
-                        }
-                    },
-                    // The file modified time is somehow earlier than
-                    // If-Modified-Date, but that's okay, since the normal file
-                    // handler will handle it.
-                    Err(_) => (),
+                if let Ok(duration) = modified_date.duration_since(if_modified_since_date) {
+                    if duration.as_secs() == 0 {
+                        let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
+                        response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+                        response.headers.set(HeaderName::LastModified, if_modified_since.to_owned());
+                        return Ok(Some(response));
+                    }
                 }
+
+                // The file modified time is somehow earlier than
+                // If-Modified-Date, but that's okay, since the normal file
+                // handler will handle it.
             }
         }
     }
 
-    // TODO support etags and stuff
-    return Ok(None);
+    Ok(None)
 }
 
+/// Finishes a response for an error response.
 pub async fn finish_response_error(response: &mut Response) -> Result<(), io::Error>{
     response.headers.set(HeaderName::Connection, HeaderValue::from("close"));
     finish_response_general(response).await
 }
 
+/// Finishes a response for both normal and error response.
 async fn finish_response_general(response: &mut Response) -> Result<(), io::Error>{
     if let Some(body) = &response.body {
         if !response.headers.contains(&HeaderName::LastModified) {
@@ -134,6 +133,7 @@ async fn finish_response_general(response: &mut Response) -> Result<(), io::Erro
     Ok(())
 }
 
+/// Finishes a response for a normal (OK) response.
 pub async fn finish_response_normal(request: &Request, response: &mut Response) -> Result<(), io::Error>{
     if response.body.is_some() {
         if !response.headers.contains(&HeaderName::ContentType) {
@@ -150,6 +150,7 @@ pub async fn finish_response_normal(request: &Request, response: &mut Response) 
     finish_response_general(response).await
 }
 
+/// Handles a `HttpParseError`.
 pub async fn handle_parse_error(error: HttpParseError) -> Response {
     match error {
         HttpParseError::HeaderTooLarge => Response::with_status_and_string_body(StatusCode::RequestHeaderFieldsTooLarge, "Request Header Fields Too Large"),
@@ -162,9 +163,10 @@ pub async fn handle_parse_error(error: HttpParseError) -> Response {
     }
 }
 
+/// Handles a request.
 pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Result<Response, Error> {
     let controller = config.handler_controller.clone();
-    if let Some(result) = controller.check_handle(&request) {
+    if let Some(result) = controller.check_handle(request) {
         return result.map_err(|error| Error::Other(io::Error::new(io::ErrorKind::Other, error)));
     }
 
@@ -201,9 +203,12 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
 
         return Ok(Response::with_status_and_string_body(StatusCode::NotFound, "Not Found"));
     }
+
     Ok(Response::with_status_and_string_body(StatusCode::BadRequest, "Invalid Target"))
 }
 
+/// Serves the welcome page to the client if the `wwwroot/index.html` file does
+/// not exist.
 async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<Response, Error> {
     if !request.headers.contains(&HeaderName::ETag) {
         if let Some(modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
@@ -228,10 +233,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
     response.headers.set(HeaderName::ETag, "welcome-en".into());
     response.headers.set(HeaderName::Vary, "Content-Language".into());
 
-    let request_etag = match request.headers.get(&HeaderName::IfNoneMatch) {
-        Some(etag) => Some(etag.as_str_no_convert().unwrap()),
-        None => None,
-    };
+    let request_etag = request.headers.get(&HeaderName::IfNoneMatch).map(|etag| etag.as_str_no_convert().unwrap());
 
     match request_target {
         "/" | "/index" | "/index.html" => {
@@ -260,9 +262,12 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
         _ => return Ok(Response::with_status_and_string_body(StatusCode::NotFound, "Not Found")),
     }
 
-    return Ok(response);
+    Ok(response)
 }
 
+/// Initiated by a request that didn't have this file in cache. This function
+/// will check for the right conditions and stores the file in the cache if
+/// necessary.
 async fn maybe_cache_file(path: &Path) {
     let Ok(mut file) = tokio::fs::File::open(path).await else {
         return;
@@ -285,7 +290,7 @@ async fn maybe_cache_file(path: &Path) {
 }
 
 async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> Result<Response, Error> {
-    if let Some(not_modified_response) = check_not_modified(request, &path, &metadata).await? {
+    if let Some(not_modified_response) = check_not_modified(request, path, metadata).await? {
         return Ok(not_modified_response);
     }
 
@@ -301,7 +306,7 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
     }
 
     let file = tokio::fs::File::open(&path).await?;
-    maybe_cache_file(&path).await;
+    maybe_cache_file(path).await;
 
     let mut response = Response::with_status(StatusCode::Ok);
     response.body = Some(BodyKind::File(file));
@@ -328,9 +333,10 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
         });
     }
 
-    return Ok(response);
+    Ok(response)
 }
 
+/// Serve the welcome page response with a 304 Not Modified status code.
 fn serve_welcome_page_not_modified(request: &Request) -> Response {
     let mut response = Response::with_status(StatusCode::NotModified);
     response.headers.set(HeaderName::Vary, "Content-Language".into());
@@ -343,5 +349,5 @@ fn serve_welcome_page_not_modified(request: &Request) -> Response {
         response.headers.set(HeaderName::LastModified, if_modified_since.clone());
     }
 
-    return response;
+    response
 }
