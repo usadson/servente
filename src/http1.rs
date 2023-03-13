@@ -10,7 +10,7 @@ use std::{
     fs,
     io::{self, SeekFrom},
     path::Path,
-    time::{SystemTime, Duration},
+    time::{SystemTime, Duration}, mem::swap,
 };
 
 use crate::{
@@ -238,7 +238,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
         where R: AsyncBufReadExt + Unpin, W: AsyncWriteExt + Unpin {
     let start_full = Instant::now();
 
-    let request = match read_request_excluding_body(reader).await {
+    let mut request = match read_request_excluding_body(reader).await {
         Ok(request) => request,
         Err(error) => {
             match error {
@@ -254,6 +254,21 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
             }
         }
     };
+
+    // TODO some handlers might prefer to read the body themselves.
+    if let Err(error) = read_request_body(reader, &mut request).await {
+        match error {
+            Error::ParseError(error) => {
+                let mut response = handle_parse_error(error).await;
+                finish_response_error(&mut response).await.unwrap();
+                send_response(writer, response, None).await?;
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "Parse error"));
+            }
+            Error::Other(error) => {
+                return Err(error);
+            }
+        }
+    }
 
     let start_handling = Instant::now();
     let mut response = match handle_request(reader, &request, config).await {
@@ -286,6 +301,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
 async fn handle_parse_error(error: HttpParseError) -> Response {
     match error {
         HttpParseError::HeaderTooLarge => Response::with_status_and_string_body(StatusCode::RequestHeaderFieldsTooLarge, "Request Header Fields Too Large"),
+        HttpParseError::InvalidContentLength => Response::bad_request("Malformed Content-Length"),
         HttpParseError::InvalidCRLF => Response::bad_request("Invalid CRLF"),
         HttpParseError::InvalidHttpVersion => Response::with_status_and_string_body(StatusCode::HTTPVersionNotSupported, "Invalid HTTP version"),
         HttpParseError::InvalidRequestTarget => Response::bad_request("Invalid request target"),
@@ -502,11 +518,54 @@ async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length
     Err(Error::ParseError(length_error))
 }
 
+/// Reads the request body from the stream and stores it in the request.
+async fn read_request_body<R>(stream: &mut R, request: &mut Request) -> Result<(), Error>
+        where R: AsyncBufReadExt + Unpin {
+    if let Some(content_length) = request.headers.get(&HeaderName::ContentLength) {
+        request.body = Some(read_request_body_content_length(stream, request, content_length).await?);
+        return Ok(());
+    }
+
+    if request.headers.get(&HeaderName::TransferEncoding).is_some() {
+        request.body = Some(read_request_body_chunked(stream).await?);
+        return Ok(());
+    }
+
+    Ok(())
+}
+
+/// Reads the request-body
+async fn read_request_body_content_length<R>(stream: &mut R, request: &Request, content_length: &HeaderValue) -> Result<BodyKind, Error>
+        where R: AsyncBufReadExt + Unpin {
+    let content_length = content_length.parse_number().ok_or(Error::ParseError(HttpParseError::InvalidContentLength))?;
+    let mut body = Vec::with_capacity(content_length);
+
+    stream.read_exact(body.as_mut_slice()).await?;
+
+    if let Some(media_type) = request.headers.get(&HeaderName::ContentType) {
+        // TODO: correctly parse the Media Type
+        if media_type.as_str_no_convert().unwrap().starts_with("text/") {
+            match String::from_utf8(body) {
+                Ok(body) => return Ok(BodyKind::String(body)),
+                // String conversion was impossible (possibly not UTF-8), so just return the bytes.
+                Err(error) => return Ok(BodyKind::Bytes(error.into_bytes())),
+            }
+        }
+    }
+    Ok(BodyKind::Bytes(body))
+}
+
+async fn read_request_body_chunked<R>(_stream: &mut R) -> Result<BodyKind, Error>
+        where R: AsyncBufReadExt + Unpin {
+    // TODO: support chunked encoding
+    Err(Error::Other(io::Error::new(io::ErrorKind::InvalidData, "TODO: support chunked encoding")))
+}
+
 async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error>
         where R: AsyncBufReadExt + Unpin {
     let (method, target, version) = read_request_line(stream).await?;
     let headers = read_headers(stream).await?;
-    Ok(Request { method, target, version, headers })
+    Ok(Request { method, target, version, headers, body: None })
 }
 
 async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), Error>

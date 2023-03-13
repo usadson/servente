@@ -7,6 +7,9 @@ pub enum HttpParseError {
     /// The header (name + value) was too large.
     HeaderTooLarge,
 
+    /// The `Content-Length` field was malformed.
+    InvalidContentLength,
+
     /// The line ended with CR but not followed by an LF.
     InvalidCRLF,
 

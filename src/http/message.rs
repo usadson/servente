@@ -554,6 +554,16 @@ impl HeaderValue {
             }
         }
     }
+
+    /// Parses the value as a number.
+    pub fn parse_number(&self) -> Option<usize> {
+        match self {
+            HeaderValue::StaticString(string) => string.parse().ok(),
+            HeaderValue::String(string) => string.parse().ok(),
+            HeaderValue::Size(size) => Some(*size),
+            _ => None,
+        }
+    }
 }
 
 impl From<&'static str> for HeaderValue {
@@ -805,12 +815,13 @@ impl RequestTarget {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Request {
     pub method: Method,
     pub target: RequestTarget,
     pub version: HttpVersion,
     pub headers: HeaderMap,
+    pub body: Option<BodyKind>,
 }
 
 #[derive(Debug)]
