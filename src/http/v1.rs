@@ -41,8 +41,11 @@ use crate::{
     ServenteConfig,
 };
 
+/// The threshold at which the response body is transferred using chunked
+/// encoding.
 const TRANSFER_ENCODING_THRESHOLD: u64 = 1000_000_000_000_000_000; // 1 MiB
 
+/// Indicates the maximum length of a certain HTTP entity.
 struct MaximumLength(pub usize);
 
 impl MaximumLength {
@@ -56,6 +59,7 @@ impl MaximumLength {
     pub const HEADER: MaximumLength = MaximumLength(4096);
 }
 
+/// The strategy to use for transferring the response body.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransferStrategy {
     Chunked,
@@ -63,6 +67,8 @@ pub enum TransferStrategy {
     Ranges { ranges: HttpRangeList },
 }
 
+/// Consume a `U+000D CARRIAGE RETURN` character (CR) and a `U+000A LINE FEED`
+/// character (LF) from the stream.
 async fn consume_crlf<R>(stream: &mut R) -> Result<(), Error>
         where R: AsyncBufReadExt + Unpin {
     let mut buffer = [0u8; 2];
@@ -75,6 +81,7 @@ async fn consume_crlf<R>(stream: &mut R) -> Result<(), Error>
     Ok(())
 }
 
+/// Plans out the best `TransferStrategy` for the given response.
 async fn determine_transfer_strategy(response: &mut Response, ranges: Option<HttpRangeList>) -> TransferStrategy {
     let Some(body) = &response.body else {
         if response.status.class() != StatusCodeClass::Informational {
@@ -157,6 +164,7 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
     }
 }
 
+/// Discards the full request.
 async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
     let mut buffer = BufReader::new(stream);
     loop {
@@ -167,6 +175,8 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
     }
 }
 
+/// Reads a single response, handles it and sends the response back to the
+/// client.
 async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &ServenteConfig) -> Result<(), io::Error>
         where R: AsyncBufReadExt + Unpin, W: AsyncWriteExt + Unpin {
     let start_full = Instant::now();
@@ -231,6 +241,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
     Ok(())
 }
 
+/// Process a single socket connection.
 async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
     println!("Client connected: {}", stream.peer_addr().unwrap());
     let mut buf = [0u8; 4];
@@ -263,6 +274,7 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
     }
 }
 
+/// Reads a line from the stream, up to the maximum length.
 async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Result<String, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut string = String::new();
@@ -283,6 +295,7 @@ async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Res
     Err(Error::ParseError(HttpParseError::HeaderTooLarge))
 }
 
+/// Reads the headers from the stream.
 async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut headers = Vec::new();
@@ -306,6 +319,7 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
     }
 }
 
+/// Reads the HTTP version from the stream.
 async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut version_buffer = [0u8; 8];
@@ -319,6 +333,8 @@ async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, Error>
     })
 }
 
+/// Reads a string from the stream until the given character is found, or the
+/// maximum length is reached.
 async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length: MaximumLength, length_error: HttpParseError) -> Result<String, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut buffer = String::new();
@@ -372,12 +388,19 @@ async fn read_request_body_content_length<R>(stream: &mut R, request: &Request, 
     Ok(BodyKind::Bytes(body))
 }
 
+/// Reads the body of a request, assuming that the body is encoded using chunked
+/// transfer encoding.
 async fn read_request_body_chunked<R>(_stream: &mut R) -> Result<BodyKind, Error>
         where R: AsyncBufReadExt + Unpin {
     // TODO: support chunked encoding
     Err(Error::Other(io::Error::new(io::ErrorKind::InvalidData, "TODO: support chunked encoding")))
 }
 
+/// Read the request-line and headers from the stream, without reading the body.
+///
+/// We do not read the body here, because the handler might prefer to use their
+/// own method of reading the body. This is especially useful for streaming
+/// data, directly reading and writing without buffering, etc.
 async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error>
         where R: AsyncBufReadExt + Unpin {
     let (method, target, version) = read_request_line(stream).await?;
@@ -385,6 +408,7 @@ async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error
     Ok(Request { method, target, version, headers, body: None })
 }
 
+/// Read the request-line from the stream.
 async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), Error>
         where R: AsyncBufReadExt + Unpin {
 
@@ -401,6 +425,10 @@ async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, 
     Ok((method, target, version))
 }
 
+/// Reads the request-target from the stream.
+///
+/// ### References
+/// * [RFC 9112, Section 3.2. Request Target](https://www.rfc-editor.org/rfc/rfc9112.html#name-request-target)
 async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
         where R: AsyncBufReadExt + Unpin {
     let str = read_string_until_character(stream, ' ' as u8, MaximumLength::REQUEST_TARGET, HttpParseError::RequestTargetTooLarge).await?;
@@ -417,7 +445,7 @@ async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
         });
     }
 
-    // TODO
+    // TODO: correctly parse the URI.
     if str.starts_with("http://") || str.starts_with("https://") {
         return Ok(RequestTarget::Absolute(str));
     }
@@ -425,6 +453,11 @@ async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
     Err(Error::ParseError(HttpParseError::InvalidRequestTarget))
 }
 
+/// Send the HTTPS upgrade to the client.
+///
+/// ### TODO
+/// In the future, we should prefer using a 3xx response, redirecting the client
+/// to the https-scheme.
 async fn send_http_upgrade(stream: &mut TcpStream) -> Result<(), io::Error> {
     let body = "HTTPS is required.";
     let message = format!(
@@ -443,6 +476,7 @@ async fn send_http_upgrade(stream: &mut TcpStream) -> Result<(), io::Error> {
     Ok(())
 }
 
+/// Send the response to the client.
 async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option<HttpRangeList>) -> Result<Duration, io::Error>
         where R: AsyncWriteExt + Unpin {
     let transfer_strategy = determine_transfer_strategy(&mut response, ranges).await;
@@ -486,7 +520,7 @@ async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option
     Ok(start.elapsed())
 }
 
-
+/// Start the HTTPv1 server on the given address.
 pub async fn start(address: &str, config: ServenteConfig) -> io::Result<()> {
     let listener = TcpListener::bind(address).await?;
     println!("Started listening on {}", address);
@@ -500,6 +534,7 @@ pub async fn start(address: &str, config: ServenteConfig) -> io::Result<()> {
     }
 }
 
+/// Transfer the body, using the `Transfer-Encoding: chunked` algorithm.
 async fn transfer_body_chunked<O, I>(output: &mut O, input: &mut I) -> Result<(), io::Error>
         where O: AsyncWriteExt + Unpin,
               I: AsyncReadExt + Unpin {
@@ -523,6 +558,8 @@ async fn transfer_body_chunked<O, I>(output: &mut O, input: &mut I) -> Result<()
     Ok(())
 }
 
+/// Transfer the body, using the full contents of the input, without and
+/// `Transfer-Encoding` or `range`s.
 async fn transfer_body_full<O, I>(output: &mut O, input: &mut I) -> Result<(), io::Error>
         where O: AsyncWriteExt + Unpin,
               I: AsyncReadExt + Unpin {
@@ -549,6 +586,7 @@ async fn transfer_body_full<O, I>(output: &mut O, input: &mut I) -> Result<(), i
     Ok(())
 }
 
+/// Transfer the body, using the ranges specified in the request.
 async fn transfer_body_ranges<O, I>(output: &mut O, input: &mut I, ranges: HttpRangeList) -> Result<(), io::Error>
         where O: AsyncWriteExt + Unpin,
               I: AsyncReadExt + AsyncSeekExt + Unpin {
