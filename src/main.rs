@@ -12,7 +12,6 @@ mod client;
 mod example_handlers;
 mod handler;
 pub mod http;
-mod http1;
 mod resources;
 
 #[derive(Clone)]
@@ -52,7 +51,7 @@ async fn main() -> io::Result<()> {
     println!("Loaded after {} ms", start.elapsed().as_millis());
 
     let join_handle = task::spawn(async move {
-        http1::start("127.0.0.1:8080", config).await
+        http::v1::start("127.0.0.1:8080", config).await
     });
 
     let join_handle_v3 = task::spawn(async move {
