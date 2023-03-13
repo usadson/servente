@@ -609,3 +609,46 @@ async fn transfer_body_ranges<O, I>(output: &mut O, input: &mut I, ranges: HttpR
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use crate::http::{message::{Method, RequestTarget, HttpVersion}, error::HttpParseError, Error};
+
+    #[tokio::test]
+    async fn read_request_line_normal() {
+        let mut stream = std::io::Cursor::new(b"GET / HTTP/1.1\r\n");
+        let request_line = super::read_request_line(&mut stream).await.unwrap();
+        assert_eq!(request_line.0, Method::Get);
+        assert_eq!(request_line.1 , RequestTarget::Origin { path: "/".to_string(), query: String::new() });
+        assert_eq!(request_line.2, HttpVersion::Http11);
+    }
+
+    #[rstest]
+    #[case(b"DELETE / HTTP/1.1\r\n", Method::Delete)]
+    #[case(b"GET / HTTP/1.1\r\n", Method::Get)]
+    #[case(b"get / HTTP/1.1\r\n", Method::Get)]
+    #[case(b"POST / HTTP/1.1\r\n", Method::Post)]
+    #[case(b"PUT / HTTP/1.1\r\n", Method::Put)]
+    #[case(b"OPTIONS * HTTP/1.1\r\n", Method::Options)]
+    #[case(b"NEW-METHOD / HTTP/1.1\r\n", Method::Other(String::from("NEW-METHOD")))]
+    #[tokio::test]
+    async fn read_request_line_methods(#[case] input: &[u8], #[case] expected: Method) {
+        let mut stream = std::io::Cursor::new(input);
+        let request_line = super::read_request_line(&mut stream).await.unwrap();
+        assert_eq!(request_line.0, expected);
+        assert_eq!(request_line.2, HttpVersion::Http11);
+    }
+
+    #[tokio::test]
+    async fn read_request_line_long_method() {
+        let mut stream = std::io::Cursor::new(b"THIS-IS-A-VERY-LONG-METHOD / HTTP/1.1\r\n");
+        let request_line = super::read_request_line(&mut stream).await;
+        assert!(request_line.is_err());
+        let error = request_line.err().unwrap();
+        match &error {
+            Error::ParseError(HttpParseError::MethodTooLarge) => {},
+            _ => panic!("Unexpected error: {:?}", error),
+        }
+    }
+}

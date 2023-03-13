@@ -10,6 +10,7 @@ anyhow = "*"
 httpdate = "*"
 lazy_static = "*"
 rcgen = "*"
+rstest = "*"
 rustls = { version = "*", features = ["quic"] }
 rustls-pemfile = "*"
 stretto = { version = "*", features = ["async"] }
