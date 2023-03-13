@@ -674,6 +674,10 @@ impl HeaderMap {
     }
 }
 
+pub fn format_system_time_as_weak_etag(date_time: SystemTime) -> String {
+    format!("W/{:X}", date_time.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs())
+}
+
 //
 // Header-specific methods
 //
@@ -694,6 +698,13 @@ impl HeaderMap {
 
     pub fn set_content_type(&mut self, media_type: MediaType) {
         self.set(HeaderName::ContentType, HeaderValue::MediaType(media_type));
+    }
+
+    pub fn set_last_modified(&mut self, date_time: SystemTime) {
+        self.set(HeaderName::LastModified, HeaderValue::DateTime(date_time));
+        if !self.contains(&HeaderName::ETag) {
+            self.set(HeaderName::ETag, format_system_time_as_weak_etag(date_time).into());
+        }
     }
 }
 

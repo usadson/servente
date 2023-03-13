@@ -26,7 +26,7 @@ use self::{
         Request,
         Response,
         StatusCode,
-        StatusCodeClass, HeaderMap, RequestTarget, Method,
+        StatusCodeClass, HeaderMap, RequestTarget, Method, format_system_time_as_weak_etag,
     }, hints::{AcceptedLanguages, SecFetchDest},
 };
 
@@ -65,8 +65,17 @@ impl From<io::Error> for Error {
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
 async fn check_not_modified(request: &Request, path: &Path, metadata: &fs::Metadata) -> Result<Option<Response>, io::Error> {
-    if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
-        if let Ok(modified_date) = metadata.modified() {
+    if let Ok(modified_date) = metadata.modified() {
+        if let Some(etag) = request.headers.get(&HeaderName::IfNoneMatch) {
+            if etag.as_str_no_convert().unwrap() == format_system_time_as_weak_etag(modified_date) {
+                let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
+                response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+                response.headers.set(HeaderName::ETag, etag.clone());
+                return Ok(Some(response));
+            }
+        }
+
+        if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
             if let Ok(if_modified_since_date) = if_modified_since.try_into() {
                 match modified_date.duration_since(if_modified_since_date) {
                     Ok(duration) => {
@@ -101,7 +110,7 @@ async fn finish_response_general(response: &mut Response) -> Result<(), io::Erro
             if let BodyKind::File(file) = body {
                 if let Ok(metadata) = file.metadata().await {
                     if let Ok(modified_date) = metadata.modified() {
-                        response.headers.set(HeaderName::LastModified, HeaderValue::from(modified_date));
+                        response.headers.set_last_modified(modified_date);
                     }
                 }
             }
@@ -193,13 +202,13 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
 }
 
 async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<Response, Error> {
-    if let Some(modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
-        if let Some(modified_since) = modified_since.as_str_no_convert() {
-            if let Ok(modified_since) = httpdate::parse_http_date(modified_since) {
-                if SystemTime::UNIX_EPOCH.duration_since(modified_since).unwrap().as_secs() < 600 {
-                    let mut response = Response::with_status(StatusCode::NotModified);
-                    response.headers.set(HeaderName::Vary, "Content-Language".into());
-                    return Ok(response);
+    if !request.headers.contains(&HeaderName::ETag) {
+        if let Some(modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
+            if let Some(modified_since) = modified_since.as_str_no_convert() {
+                if let Ok(modified_since) = httpdate::parse_http_date(modified_since) {
+                    if SystemTime::UNIX_EPOCH.duration_since(modified_since).unwrap().as_secs() < 600 {
+                        return Ok(serve_welcome_page_not_modified(request));
+                    }
                 }
             }
         }
@@ -213,7 +222,13 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
     response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML));
     response.headers.set(HeaderName::ContentLanguage, "en".into());
     response.headers.set(HeaderName::LastModified, HeaderValue::from(SystemTime::UNIX_EPOCH));
+    response.headers.set(HeaderName::ETag, "welcome-en".into());
     response.headers.set(HeaderName::Vary, "Content-Language".into());
+
+    let request_etag = match request.headers.get(&HeaderName::IfNoneMatch) {
+        Some(etag) => Some(etag.as_str_no_convert().unwrap()),
+        None => None,
+    };
 
     match request_target {
         "/" | "/index" | "/index.html" => {
@@ -223,6 +238,12 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
                         if best == "nl" {
                             response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML_NL));
                             response.headers.set(HeaderName::ContentLanguage, "nl".into());
+                            response.headers.set(HeaderName::ETag, "welcome-nl".into());
+                            if request_etag == Some("welcome-nl") {
+                                return Ok(serve_welcome_page_not_modified(request));
+                            }
+                        } else if request_etag == Some("welcome-en") {
+                            return Ok(serve_welcome_page_not_modified(request));
                         }
                     }
                 }
@@ -271,7 +292,7 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
         response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
         response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value())));
         if let Ok(modified_date) = metadata.modified() {
-            response.headers.set(HeaderName::LastModified, modified_date.into());
+            response.headers.set_last_modified(modified_date);
         }
         return Ok(response);
     }
@@ -283,7 +304,7 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
     response.body = Some(BodyKind::File(file));
 
     if let Ok(modified_date) = metadata.modified() {
-        response.headers.set(HeaderName::LastModified, modified_date.into());
+        response.headers.set_last_modified(modified_date);
     }
 
     response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
@@ -305,4 +326,19 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
     }
 
     return Ok(response);
+}
+
+fn serve_welcome_page_not_modified(request: &Request) -> Response {
+    let mut response = Response::with_status(StatusCode::NotModified);
+    response.headers.set(HeaderName::Vary, "Content-Language".into());
+
+    if let Some(etag) = request.headers.get(&HeaderName::ETag) {
+        response.headers.set(HeaderName::ETag, etag.clone());
+    }
+
+    if let Some(if_modified_since) = request.headers.get(&HeaderName::ETag) {
+        response.headers.set(HeaderName::LastModified, if_modified_since.clone());
+    }
+
+    return response;
 }

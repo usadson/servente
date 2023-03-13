@@ -8,6 +8,7 @@ A web server for static files written in Rust, used as a learning project and a 
 | Accept-Ranges         | ✅     | Accepting range requests (especially useful for video's) | Fully supported                   |
 | Content-Encoding      | ❌     | Compressing data before sending                          | Not implemented yet               |
 | Custom API handlers   | 🤕     | Experimental API for adding custom handlers              | Experimental                      |
+| ETag Caching          | ✅     | Cache files using an identifier                          | Based on file modification date   |
 | HTTP/1.1              | ✅     | HTTP version every client supports                       | Compliant                         |
 | HTTP/2                | ❌     | Improved binary-format HTTP (2015)                       | Not implemented yet               |
 | HTTP/2 Server Push    | ❎     | Pushing resources to the client before requested         | Won't be implemented              |
