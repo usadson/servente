@@ -64,7 +64,7 @@ impl From<io::Error> for Error {
 }
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
-async fn check_not_modified(request: &Request, _path: &Path, metadata: &fs::Metadata) -> Result<Option<Response>, io::Error> {
+async fn check_not_modified(request: &Request, path: &Path, metadata: &fs::Metadata) -> Result<Option<Response>, io::Error> {
     if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
         if let Ok(modified_date) = metadata.modified() {
             if let Ok(if_modified_since_date) = if_modified_since.try_into() {
@@ -72,6 +72,7 @@ async fn check_not_modified(request: &Request, _path: &Path, metadata: &fs::Meta
                     Ok(duration) => {
                         if duration.as_secs() == 0 {
                             let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
+                            response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
                             response.headers.set(HeaderName::LastModified, if_modified_since.to_owned());
                             return Ok(Some(response));
                         }
@@ -169,53 +170,16 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
 
         if let Ok(metadata) = std::fs::metadata(&path) {
             if metadata.is_file() {
-                if let Some(not_modified_response) = check_not_modified(request, &path, &metadata).await? {
-                    return Ok(not_modified_response);
-                }
+                return serve_file(request, &path, &metadata).await;
+            }
 
-                if let Some(cached) = FILE_CACHE.get(path.to_string_lossy().as_ref()) {
-                    let mut response = Response::with_status(StatusCode::Ok);
-                    response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
-                    response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value())));
-                    if let Ok(modified_date) = metadata.modified() {
-                        response.headers.set(HeaderName::LastModified, modified_date.into());
+            if metadata.is_dir() {
+                let path = path.join("index.html");
+                if let Ok(metadata) = std::fs::metadata(&path) {
+                    if metadata.is_file() {
+                        return serve_file(request, &path, &metadata).await;
                     }
-                    return Ok(response);
                 }
-
-                let file = tokio::fs::File::open(&path).await?;
-                maybe_cache_file(&path).await;
-
-                let mut response = Response::with_status(StatusCode::Ok);
-                response.body = Some(BodyKind::File(file));
-
-                if let Ok(modified_date) = metadata.modified() {
-                    response.headers.set(HeaderName::LastModified, modified_date.into());
-                }
-
-                if request.headers.sec_fetch_dest() == Some(SecFetchDest::Document) {
-                    response.prelude_response.push(Response{
-                        version: request.version,
-                        status: StatusCode::EarlyHints,
-                        headers: HeaderMap::new_with_vec(vec![
-                            (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
-                            (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
-                            (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
-                            (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
-                            (HeaderName::Link, HeaderValue::from("<script.js>; rel=preload; as=script")),
-                        ]),
-                        body: None,
-                        prelude_response: vec![],
-                    });
-                    response.headers = HeaderMap::new_with_vec(vec![
-                        (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
-                        (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
-                        (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
-                        (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
-                    ]);
-                }
-
-                return Ok(response);
             }
         }
 
@@ -280,4 +244,51 @@ async fn maybe_cache_file(path: &Path) {
 
         FILE_CACHE.insert_with_ttl(path.to_str().unwrap().to_string(), Arc::new(data), 0, Duration::from_secs(60)).await;
     });
+}
+
+async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> Result<Response, Error> {
+    if let Some(not_modified_response) = check_not_modified(request, &path, &metadata).await? {
+        return Ok(not_modified_response);
+    }
+
+    if let Some(cached) = FILE_CACHE.get(path.to_string_lossy().as_ref()) {
+        let mut response = Response::with_status(StatusCode::Ok);
+        response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+        response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
+        response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value())));
+        if let Ok(modified_date) = metadata.modified() {
+            response.headers.set(HeaderName::LastModified, modified_date.into());
+        }
+        return Ok(response);
+    }
+
+    let file = tokio::fs::File::open(&path).await?;
+    maybe_cache_file(&path).await;
+
+    let mut response = Response::with_status(StatusCode::Ok);
+    response.body = Some(BodyKind::File(file));
+
+    if let Ok(modified_date) = metadata.modified() {
+        response.headers.set(HeaderName::LastModified, modified_date.into());
+    }
+
+    response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+
+    if request.headers.sec_fetch_dest() == Some(SecFetchDest::Document) {
+        response.prelude_response.push(Response{
+            version: request.version,
+            status: StatusCode::EarlyHints,
+            headers: HeaderMap::new_with_vec(vec![
+                (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
+                (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
+                (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
+                (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
+                (HeaderName::Link, HeaderValue::from("<script.js>; rel=preload; as=script")),
+            ]),
+            body: None,
+            prelude_response: vec![],
+        });
+    }
+
+    return Ok(response);
 }
