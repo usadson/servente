@@ -2,3 +2,8 @@
 .vscode
 target
 wwwroot
+
+callgrind*
+out.*
+*.out
+*.out.*
