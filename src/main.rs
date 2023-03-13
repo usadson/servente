@@ -1,9 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use tokio::{
-    task,
-};
+use tokio::task;
 
 use std::{io, sync::Arc, time::Instant};
 
@@ -46,6 +44,8 @@ async fn main() -> io::Result<()> {
         tls_config: Arc::new(tls_config),
         handler_controller,
     };
+
+    #[cfg(feature = "http3")]
     let config_v3 = config.clone();
 
     println!("Loaded after {} ms", start.elapsed().as_millis());
@@ -54,12 +54,17 @@ async fn main() -> io::Result<()> {
         http::v1::start("127.0.0.1:8080", config).await
     });
 
+    #[cfg(feature = "http3")]
     let join_handle_v3 = task::spawn(async move {
         http::v3::start(config_v3.tls_config).await
     });
 
     _ = join_handle.await.unwrap();
-    _ = join_handle_v3.await.unwrap();
+
+    #[cfg(feature = "http3")]
+    {
+        _ = join_handle_v3.await.unwrap();
+    }
 
     println!("Stopped after {} ms", start.elapsed().as_millis());
     Ok(())

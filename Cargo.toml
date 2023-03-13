@@ -17,6 +17,18 @@ stretto = { version = "*", features = ["async"] }
 tokio = { version = "*", features = ["full"] }
 tokio-rustls = "*"
 phf = { version = "*", features = ["macros", "unicase"] }
-quinn = { version = "*", features = ["rustls"] }
 unicase = "*"
 urlencoding = "*"
+
+# Optional dependencies
+quinn = { version = "*", features = ["rustls"], optional = true }
+
+[features]
+default = []
+http3 = ["dep:quinn"]
+
+[profile.release]
+opt-level = 3
+debug = true
+codegen-units = 1
+lto = true

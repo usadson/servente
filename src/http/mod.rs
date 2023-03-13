@@ -34,6 +34,8 @@ pub mod error;
 pub mod hints;
 pub mod message;
 pub mod v1;
+
+#[cfg(feature = "http3")]
 pub mod v3;
 
 /// The maximum size of a file that can be cached in memory.
