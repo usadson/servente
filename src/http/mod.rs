@@ -119,6 +119,9 @@ async fn finish_response_general(response: &mut Response) -> Result<(), io::Erro
 
     response.headers.set(HeaderName::Server, HeaderValue::from("servente"));
     response.headers.set(HeaderName::AltSvc, HeaderValue::from("h2=\":8080\", h3=\":8080\""));
+    response.headers.set(HeaderName::XFrameOptions, "DENY".into());
+    response.headers.set(HeaderName::XXSSProtection, "X-XSS-Protection: 1; mode=block".into());
+    response.headers.set(HeaderName::XContentTypeOptions, "nosniff".into());
 
     if !response.headers.contains(&HeaderName::Connection) {
         response.headers.set(HeaderName::Connection, HeaderValue::from("keep-alive"));
