@@ -236,19 +236,19 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
                 .and_then(|range| HttpRangeList::parse(range))
     ).await?;
 
-    println!("{:?}>: {:?} (f={}ms, h={}ms, b={}ms)", request.method, request.target, start_full.elapsed().as_millis(), start_handling.elapsed().as_millis(), sent_body.as_millis());
+    //println!("{:?}>: {:?} (f={}ms, h={}ms, b={}ms)", request.method, request.target, start_full.elapsed().as_millis(), start_handling.elapsed().as_millis(), sent_body.as_millis());
 
     Ok(())
 }
 
 /// Process a single socket connection.
 async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
-    println!("Client connected: {}", stream.peer_addr().unwrap());
+    //println!("Client connected: {}", stream.peer_addr().unwrap());
     let mut buf = [0u8; 4];
     if let Ok(length) = stream.peek(&mut buf).await {
         if length >= 3 && &buf[0..3] == b"GET" {
             if let Err(e) = discard_request(&mut stream).await {
-                println!("Client Error discarding non-HTTPS: {:?}", e);
+                //println!("Client Error discarding non-HTTPS: {:?}", e);
                 return;
             }
 
@@ -268,7 +268,7 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
 
     loop {
         if let Err(e) = handle_exchange(&mut reader, &mut writer, &config).await {
-            println!("Client Error: {:?}", e);
+            //println!("Client Error: {:?}", e);
             return;
         }
     }
