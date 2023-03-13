@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{borrow::Cow, time::SystemTime};
+use std::{borrow::Cow, sync::Arc, time::SystemTime};
 
 use phf::phf_map;
 use unicase::UniCase;
@@ -827,6 +827,7 @@ pub struct Request {
 #[derive(Debug)]
 pub enum BodyKind {
     Bytes(Vec<u8>),
+    CachedBytes(Arc<Vec<u8>>),
     File(tokio::fs::File),
     StaticString(&'static str),
     String(String),

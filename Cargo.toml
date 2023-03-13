@@ -8,9 +8,11 @@ edition = "2021"
 [dependencies]
 anyhow = "*"
 httpdate = "*"
+lazy_static = "*"
 rcgen = "*"
 rustls = { version = "*", features = ["quic"] }
 rustls-pemfile = "*"
+stretto = { version = "*", features = ["async"] }
 tokio = { version = "*", features = ["full"] }
 tokio-rustls = "*"
 phf = { version = "*", features = ["macros", "unicase"] }

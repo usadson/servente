@@ -1,3 +1,5 @@
+use lazy_static::lazy_static;
+use stretto::AsyncCache;
 use tokio::{
     net::{TcpListener, TcpStream},
     task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt}, time::Instant,
@@ -10,7 +12,7 @@ use std::{
     fs,
     io::{self, SeekFrom},
     path::Path,
-    time::{SystemTime, Duration}, mem::swap,
+    time::{SystemTime, Duration}, mem::swap, sync::Arc,
 };
 
 use crate::{
@@ -21,7 +23,14 @@ use crate::{
     resources::{MediaType, static_res}, ServenteConfig,
 };
 
-const TRANSFER_ENCODING_THRESHOLD: u64 = 1024 * 1024; // 1 MiB
+const TRANSFER_ENCODING_THRESHOLD: u64 = 1000_000_000_000_000_000; // 1 MiB
+
+/// The maximum size of a file that can be cached in memory.
+const FILE_CACHE_MAXIMUM_SIZE: u64 = 50_000_000; // 50 MB
+
+lazy_static! {
+    static ref FILE_CACHE: AsyncCache<String, Arc<Vec<u8>>> = AsyncCache::new(12960, 1e6 as i64, tokio::spawn).unwrap();
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -156,6 +165,11 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
             }
 
             response.headers.set_content_length(file_size as _);
+            TransferStrategy::Full
+        }
+
+        BodyKind::CachedBytes(bytes) => {
+            response.headers.set_content_length(bytes.len());
             TransferStrategy::Full
         }
 
@@ -335,7 +349,18 @@ async fn handle_request<R>(stream: &mut R, request: &Request, config: &ServenteC
                     return Ok(not_modified_response);
                 }
 
-                let file = tokio::fs::File::open(&path).await.unwrap();
+                if let Some(cached) = FILE_CACHE.get(path.to_string_lossy().as_ref()) {
+                    let mut response = Response::with_status(StatusCode::Ok);
+                    response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
+                    response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value())));
+                    if let Ok(modified_date) = metadata.modified() {
+                        response.headers.set(HeaderName::LastModified, modified_date.into());
+                    }
+                    return Ok(response);
+                }
+
+                let file = tokio::fs::File::open(&path).await?;
+                maybe_cache_file(&path).await;
 
                 let mut response = Response::with_status(StatusCode::Ok);
                 response.body = Some(BodyKind::File(file));
@@ -412,6 +437,27 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
     }
 
     return Ok(response);
+}
+
+async fn maybe_cache_file(path: &Path) {
+    let Ok(mut file) = tokio::fs::File::open(path).await else {
+        return;
+    };
+
+    let path = path.to_owned();
+
+    tokio::task::spawn(async move {
+        let metadata = file.metadata().await.unwrap();
+
+        if metadata.len() > FILE_CACHE_MAXIMUM_SIZE {
+            return;
+        }
+
+        let mut data = Vec::with_capacity(metadata.len() as usize);
+        _ = file.read_to_end(&mut data).await;
+
+        FILE_CACHE.insert_with_ttl(path.to_str().unwrap().to_string(), Arc::new(data), 0, Duration::from_secs(60)).await;
+    });
 }
 
 async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
@@ -660,6 +706,7 @@ async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option
                 }
             }
             BodyKind::Bytes(response) => stream.write_all(&response).await?,
+            BodyKind::CachedBytes(response) => stream.write_all(&response).await?,
             BodyKind::StaticString(response) => stream.write_all(response.as_bytes()).await?,
             BodyKind::String(response) => stream.write_all(response.as_bytes()).await?,
         }
@@ -708,7 +755,26 @@ async fn transfer_body_chunked<O, I>(output: &mut O, input: &mut I) -> Result<()
 async fn transfer_body_full<O, I>(output: &mut O, input: &mut I) -> Result<(), io::Error>
         where O: AsyncWriteExt + Unpin,
               I: AsyncReadExt + Unpin {
-    tokio::io::copy(input, output).await?;
+    let mut buf1 = [0; 8192];
+    let mut buf2 = [0; 8192];
+
+    let mut front_buf = &mut buf1;
+    let mut back_buf = &mut buf2;
+
+    let mut len = input.read(front_buf).await?;
+
+    loop {
+        if len == 0 {
+            break;
+        }
+
+        let write_fut = output.write_all(&front_buf[0..len]);
+        len = input.read(back_buf).await?;
+        write_fut.await?;
+
+        swap(&mut front_buf, &mut back_buf);
+    }
+
     Ok(())
 }
 
