@@ -85,6 +85,12 @@ impl core::fmt::Debug for ContentEncodedVersions {
     }
 }
 
+/// Returns whether the given file should be compressed.
+/// We shouldn't compress images, since they are already compressed.
+fn should_compress_file(uncompressed: &Vec<u8>) -> bool {
+    !uncompressed.starts_with(super::FILE_JPEG_MAGIC_NUMBER) && !uncompressed.starts_with(super::FILE_PNG_MAGIC_NUMBER)
+}
+
 impl ContentEncodedVersions {
     pub fn create(uncompressed: Vec<u8>) -> Self {
         let mut result = ContentEncodedVersions {
@@ -93,8 +99,10 @@ impl ContentEncodedVersions {
             gzip: None,
         };
 
-        result.brotli = ContentCoding::Brotli.encode(&result.uncompressed);
-        result.gzip = ContentCoding::Gzip.encode(&result.uncompressed);
+        if should_compress_file(&result.uncompressed) {
+            result.brotli = ContentCoding::Brotli.encode(&result.uncompressed);
+            result.gzip = ContentCoding::Gzip.encode(&result.uncompressed);
+        }
 
         result
     }
