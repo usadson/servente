@@ -33,6 +33,7 @@ impl HandlerController {
         }
     }
 
+    #[must_use]
     pub fn check_handle(&self, request: &Request) -> Option<Result<Response, anyhow::Error>> {
         if let Some(handler_info) = self.handlers.get(request.target.as_str()) {
             let handled = handler_info.get(&request.method).map(|handler_info| {

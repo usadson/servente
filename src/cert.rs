@@ -9,6 +9,7 @@ pub struct CertificateData {
     pub private_key: PrivateKey,
 }
 
+#[must_use]
 fn load_data_from_vec_u8(certificate: Vec<u8>, private_key: Vec<u8>) -> CertificateData{
     CertificateData {
         certs: vec![Certificate(certificate)],
@@ -16,6 +17,7 @@ fn load_data_from_vec_u8(certificate: Vec<u8>, private_key: Vec<u8>) -> Certific
     }
 }
 
+#[must_use]
 pub fn load_certificate_locations() -> CertificateData {
     let subject_alt_names = vec![
         "localhost".to_string()

@@ -94,10 +94,12 @@ impl MediaType {
     pub const SVG_FONT: MediaType = MediaType::Common("font/svg");
 
     /// Returns the media type for the given extension.
+    #[must_use]
     pub fn from_extension(extension: &str) -> &'static MediaType {
         MEDIA_TYPE_BY_EXTENSION.get(&UniCase::ascii(extension)).unwrap_or(&MediaType::OCTET_STREAM)
     }
 
+    #[must_use]
     pub fn from_path(path: &str) -> &'static MediaType {
         let extension = path.rsplit('.').next().unwrap_or("");
         MediaType::from_extension(extension)

@@ -122,6 +122,7 @@ pub enum StatusCode {
 
 impl StatusCode {
     /// Returns the class of this status code.
+    #[must_use]
     pub fn class(&self) -> StatusCodeClass {
         match *self as u16 {
             100..=199 => StatusCodeClass::Informational,
@@ -133,6 +134,7 @@ impl StatusCode {
         }
     }
 
+    #[must_use]
     pub fn to_string<'a>(&self) -> Cow<'a, str> {
         Cow::Borrowed(match self {
             StatusCode::Continue => "100 Continue",
@@ -377,6 +379,7 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
 );
 
 impl From<String> for HeaderName {
+    #[must_use]
     fn from(mut value: String) -> Self {
         match STRING_TO_HEADER_NAME_MAP.get(&UniCase::ascii(&value)) {
             Some(header_name) => header_name.clone(),
@@ -389,6 +392,7 @@ impl From<String> for HeaderName {
 }
 
 impl HeaderName {
+    #[must_use]
     pub fn to_string_h1(&self) -> &str {
         match self {
             HeaderName::Other(str) => str,
@@ -507,6 +511,7 @@ pub enum HeaderValue {
 impl HeaderValue {
     /// Returns the value as a string, but does not convert it to a string if
     /// it is some other non-convertible type.
+    #[must_use]
     pub fn as_str_no_convert(&self) -> Option<&str> {
         match self {
             HeaderValue::StaticString(string) => Some(string),
@@ -556,6 +561,7 @@ impl HeaderValue {
     }
 
     /// Parses the value as a number.
+    #[must_use]
     pub fn parse_number(&self) -> Option<usize> {
         match self {
             HeaderValue::StaticString(string) => string.parse().ok(),
@@ -634,6 +640,7 @@ impl HeaderMap {
         HeaderMap { headers }
     }
 
+    #[must_use]
     pub fn contains(&self, header_name: &HeaderName) -> bool {
         for (name, _) in &self.headers {
             if name == header_name {
@@ -644,6 +651,7 @@ impl HeaderMap {
         false
     }
 
+    #[must_use]
     pub fn get(&self, header_name: &HeaderName) -> Option<&HeaderValue> {
         for (name, value) in &self.headers {
             if name == header_name {
@@ -674,6 +682,7 @@ impl HeaderMap {
     }
 }
 
+#[must_use]
 pub fn format_system_time_as_weak_etag(date_time: SystemTime) -> String {
     format!("W/{:X}", date_time.duration_since(SystemTime::UNIX_EPOCH).unwrap_or(Duration::default()).as_secs())
 }
@@ -682,6 +691,7 @@ pub fn format_system_time_as_weak_etag(date_time: SystemTime) -> String {
 // Header-specific methods
 //
 impl HeaderMap {
+    #[must_use]
     pub fn sec_fetch_dest(&self) -> Option<SecFetchDest> {
         self.get(&HeaderName::SecFetchDest)
             .and_then(|value| value.as_str_no_convert())
@@ -825,6 +835,7 @@ pub enum RequestTarget {
 
 impl RequestTarget {
     /// Returns the request target as a string.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
             RequestTarget::Origin{ path, .. } => path,
@@ -926,6 +937,7 @@ pub struct HttpRangeList {
 }
 
 impl HttpRangeList {
+    #[must_use]
     pub fn parse(value: &str) -> Option<Self> {
         if !value.starts_with("bytes=") {
             return None;
@@ -953,6 +965,7 @@ impl HttpRangeList {
 
     /// Returns the first and only range if there is only one range.
     /// Otherwise, when there are 0 or more than one, returns `None`.
+    #[must_use]
     pub fn first_and_only(&self) -> Option<Range> {
         if self.ranges.len() == 1 {
             Some(self.ranges[0])
