@@ -4,6 +4,8 @@ target
 wwwroot
 
 callgrind*
+massif*
+dhat*
 out.*
 *.out
 *.out.*

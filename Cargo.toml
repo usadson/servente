@@ -13,7 +13,7 @@ httpdate = "*"
 lazy_static = "*"
 rcgen = "*"
 rstest = "*"
-rustls = { version = "*", features = ["quic"] }
+rustls = { version = "*", features = ["quic", "secret_extraction"] }
 rustls-pemfile = "*"
 stretto = { version = "*", features = ["async"] }
 tokio = { version = "*", features = ["full"] }
@@ -22,13 +22,16 @@ phf = { version = "*", features = ["macros", "unicase"] }
 unicase = "*"
 urlencoding = "*"
 
+
 # Optional dependencies
 notify = { version = "*", optional = true }
 quinn = { version = "*", features = ["rustls"], optional = true }
+ktls = { version = "*", optional = true }
 
 [features]
 default = ["watch"]
 debugging = []
+ktls = ["dep:ktls"]
 http3 = ["dep:quinn"]
 
 # Watch for changes in the filesystem

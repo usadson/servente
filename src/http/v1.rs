@@ -3,15 +3,21 @@
 
 use tokio::{
     net::{TcpListener, TcpStream},
-    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt}, time::Instant,
+    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt, ReadHalf, WriteHalf}, time::Instant,
 };
 
-use tokio_rustls::TlsAcceptor;
+#[cfg(feature = "ktls")]
+use tokio::io::{AsyncRead, AsyncWrite};
+
+use tokio_rustls::{TlsAcceptor, server::TlsStream};
 
 use std::{
     io::{self, SeekFrom},
-    time::Duration, mem::swap
+    time::Duration, mem::swap,
 };
+
+#[cfg(feature = "ktls")]
+use std::{ops::DerefMut, pin};
 
 use crate::{
     http::{
@@ -65,6 +71,76 @@ pub enum TransferStrategy {
     Chunked,
     Full,
     Ranges { ranges: HttpRangeList },
+}
+
+
+#[cfg(feature = "ktls")]
+enum StreamWrapper {
+    Normal(TlsStream<TcpStream>),
+    KtlsStream(ktls::KtlsStream<TcpStream>),
+}
+
+
+#[cfg(feature = "ktls")]
+impl Unpin for StreamWrapper {}
+
+
+#[cfg(feature = "ktls")]
+impl AsyncRead for StreamWrapper {
+    fn poll_read(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+            buf: &mut tokio::io::ReadBuf<'_>,
+        ) -> std::task::Poll<io::Result<()>> {
+        match self.get_mut() {
+            StreamWrapper::Normal(stream) => std::pin::pin!(stream).poll_read(cx, buf),
+            StreamWrapper::KtlsStream(stream) => std::pin::pin!(stream).poll_read(cx, buf),
+        }
+    }
+}
+
+#[cfg(feature = "ktls")]
+impl AsyncWrite for StreamWrapper {
+    fn poll_write(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+            buf: &[u8],
+        ) -> std::task::Poll<io::Result<usize>> {
+        match self.get_mut() {
+            StreamWrapper::Normal(stream) => std::pin::pin!(stream).poll_write(cx, buf),
+            StreamWrapper::KtlsStream(stream) => std::pin::pin!(stream).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<io::Result<()>> {
+        match self.get_mut() {
+            StreamWrapper::Normal(stream) => std::pin::pin!(stream).poll_flush(cx),
+            StreamWrapper::KtlsStream(stream) => std::pin::pin!(stream).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<io::Result<()>> {
+        match self.get_mut() {
+            StreamWrapper::Normal(stream) => std::pin::pin!(stream).poll_shutdown(cx),
+            StreamWrapper::KtlsStream(stream) => std::pin::pin!(stream).poll_shutdown(cx),
+        }
+    }
+}
+
+
+#[cfg(not(feature = "ktls"))]
+type StreamWrapper = TlsStream<TcpStream>;
+
+/// Represents a single connection.
+struct Connection<'a> {
+    buf_reader: &'a mut BufReader<ReadHalf<StreamWrapper>>,
+    buf_writer: &'a mut BufWriter<WriteHalf<StreamWrapper>>,
 }
 
 /// Consume a `U+000D CARRIAGE RETURN` character (CR) and a `U+000A LINE FEED`
@@ -178,19 +254,18 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
 
 /// Reads a single response, handles it and sends the response back to the
 /// client.
-async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &ServenteConfig) -> Result<(), io::Error>
-        where R: AsyncBufReadExt + Unpin, W: AsyncWriteExt + Unpin {
+async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteConfig) -> Result<(), io::Error> {
     #[cfg(feature = "debugging")]
     let start_full = Instant::now();
 
-    let mut request = match read_request_excluding_body(reader).await {
+    let mut request = match read_request_excluding_body(connection.buf_reader).await {
         Ok(request) => request,
         Err(error) => {
             match error {
                 Error::ParseError(error) => {
                     let mut response = handle_parse_error(error).await;
                     finish_response_error(&mut response).await?;
-                    send_response(writer, response, None).await?;
+                    send_response(connection.buf_writer, response, None).await?;
                     return Err(io::Error::new(io::ErrorKind::InvalidData, "Parse error"));
                 }
                 Error::Other(error) => {
@@ -201,12 +276,12 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
     };
 
     // TODO some handlers might prefer to read the body themselves.
-    if let Err(error) = read_request_body(reader, &mut request).await {
+    if let Err(error) = read_request_body(connection.buf_reader, &mut request).await {
         match error {
             Error::ParseError(error) => {
                 let mut response = handle_parse_error(error).await;
                 finish_response_error(&mut response).await?;
-                send_response(writer, response, None).await?;
+                send_response(connection.buf_writer, response, None).await?;
                 return Err(io::Error::new(io::ErrorKind::InvalidData, "Parse error"));
             }
             Error::Other(error) => {
@@ -229,11 +304,11 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
     finish_response_normal(&request, &mut response).await?;
 
     for response in response.prelude_response {
-        send_response(writer, response, None).await?;
+        send_response(connection.buf_writer, response, None).await?;
     }
     response.prelude_response = Vec::new();
 
-    let sent_body = send_response(writer, response,
+    let sent_body = send_response(connection.buf_writer, response,
         request.headers.get(&HeaderName::Range)
                 .and_then(|range| range.as_str_no_convert())
                 .and_then(HttpRangeList::parse)
@@ -276,12 +351,30 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
         Err(_) => return,
     };
 
+    #[cfg(feature = "ktls")]
+    let stream = match ktls::config_ktls_server(stream) {
+        Ok(stream) => StreamWrapper::KtlsStream(stream),
+        Err(e) => {
+            //#[cfg(feature = "debugging")]
+            println!("ktls error: {:?}", e);
+
+            #[cfg(not(feature = "debugging"))]
+            { _ = e }
+            return;
+        },
+    };
+
     let (reader, writer) = split(stream);
     let mut reader = BufReader::new(reader);
     let mut writer = BufWriter::new(writer);
 
+    let mut connection = Connection {
+        buf_reader: &mut reader,
+        buf_writer: &mut writer,
+    };
+
     loop {
-        if let Err(e) = handle_exchange(&mut reader, &mut writer, &config).await {
+        if let Err(e) = handle_exchange(&mut connection, &config).await {
             #[cfg(feature = "debugging")]
             println!("Client Error: {:?}", e);
 

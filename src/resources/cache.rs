@@ -13,7 +13,7 @@ use tokio::io::AsyncReadExt;
 use super::compression::ContentEncodedVersions;
 
 /// The maximum size of a file that can be cached in memory.
-const FILE_CACHE_MAXIMUM_SIZE: u64 = 50_000_000; // 50 MB
+const FILE_CACHE_MAXIMUM_SIZE: u64 = 500_000; // 50 MB
 
 /// The default cache duration for files. This is 1 hour.
 const DEFAULT_CACHE_DURATION: Duration = Duration::from_secs(60 * 60);
@@ -39,6 +39,7 @@ fn cache_files_on_startup(path: &Path) -> Result<(), std::io::Error> {
 /// will check for the right conditions and stores the file in the cache if
 /// necessary.
 pub async fn maybe_cache_file(path: &Path) {
+    let start = std::time::Instant::now();
     let Ok(mut file) = tokio::fs::File::open(path).await else {
         return;
     };
@@ -56,6 +57,7 @@ pub async fn maybe_cache_file(path: &Path) {
 
             let cached = ContentEncodedVersions::create(data);
             FILE_CACHE.insert_with_ttl(path.to_string_lossy().to_string(), Arc::new(cached), 0, DEFAULT_CACHE_DURATION).await;
+            println!("Cached file: {} in {} seconds", path.to_string_lossy(), (start.elapsed()).as_secs_f32());
         }
     });
 }

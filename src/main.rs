@@ -46,6 +46,11 @@ async fn main() -> io::Result<()> {
     tls_config.alpn_protocols = vec![b"http/1.1".to_vec(), b"h2".to_vec(), b"h3".to_vec()];
     tls_config.send_half_rtt_data = true;
 
+    #[cfg(feature = "ktls")]
+    {
+        tls_config.enable_secret_extraction = true;
+    }
+
     let mut handler_controller = handler::HandlerController::new();
     example_handlers::register(&mut handler_controller);
 

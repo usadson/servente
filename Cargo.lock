@@ -441,6 +441,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "ktls"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a7eda6a5a7f9fae11bb73af3bd91c3506509fde2c19c15517b48103e6705ffb"
+dependencies = [
+ "futures",
+ "ktls-sys",
+ "libc",
+ "memoffset",
+ "pin-project-lite",
+ "rustls",
+ "smallvec",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+ "tracing",
+]
+
+[[package]]
+name = "ktls-sys"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13a44aeddd3581dea0fc96dc056585b4e4b25bcce730c4b03f614ff6c97fc3c6"
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -476,6 +501,15 @@ name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
+
+[[package]]
+name = "memoffset"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+dependencies = [
+ "autocfg",
+]
 
 [[package]]
 name = "miniz_oxide"
@@ -945,6 +979,7 @@ dependencies = [
  "brotli",
  "flate2",
  "httpdate",
+ "ktls",
  "lazy_static",
  "notify",
  "phf",
