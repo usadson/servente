@@ -1,10 +1,13 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod compression;
 pub mod static_res;
 
 use phf::phf_map;
 use unicase::UniCase;
+
+pub use compression::ContentCoding;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MediaType {

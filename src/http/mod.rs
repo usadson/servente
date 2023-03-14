@@ -3,9 +3,7 @@
 
 use std::{
     fs,
-    io::{
-        self,
-    },
+    io,
     path::Path,
     sync::Arc,
     time::{SystemTime, Duration}, env::current_dir,
@@ -15,7 +13,14 @@ use lazy_static::lazy_static;
 use stretto::AsyncCache;
 use tokio::io::AsyncReadExt;
 
-use crate::{resources::{MediaType, static_res}, ServenteConfig};
+use crate::{
+    resources::{
+        compression::ContentEncodedVersions,
+        MediaType,
+        static_res,
+    },
+    ServenteConfig,
+};
 
 use self::{
     error::HttpParseError,
@@ -41,8 +46,11 @@ pub mod v3;
 /// The maximum size of a file that can be cached in memory.
 const FILE_CACHE_MAXIMUM_SIZE: u64 = 50_000_000; // 50 MB
 
+/// The default cache duration for files. This is 1 hour.
+const DEFAULT_CACHE_DURATION: Duration = Duration::from_secs(60 * 60);
+
 lazy_static! {
-    static ref FILE_CACHE: AsyncCache<String, Arc<Vec<u8>>> = AsyncCache::new(12960, 1e6 as i64, tokio::spawn).unwrap();
+    static ref FILE_CACHE: AsyncCache<String, Arc<ContentEncodedVersions>> = AsyncCache::new(12960, 1e6 as i64, tokio::spawn).unwrap();
 }
 
 #[derive(Debug)]
@@ -295,7 +303,8 @@ async fn maybe_cache_file(path: &Path) {
             let mut data = Vec::with_capacity(metadata.len() as usize);
             _ = file.read_to_end(&mut data).await;
 
-            FILE_CACHE.insert_with_ttl(path.to_string_lossy().to_string(), Arc::new(data), 0, Duration::from_secs(60)).await;
+            let cached = ContentEncodedVersions::create(data);
+            FILE_CACHE.insert_with_ttl(path.to_string_lossy().to_string(), Arc::new(cached), 0, DEFAULT_CACHE_DURATION).await;
         }
     });
 }
@@ -307,9 +316,24 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
 
     if let Some(cached) = FILE_CACHE.get(path.to_string_lossy().as_ref()) {
         let mut response = Response::with_status(StatusCode::Ok);
+
+        let encoding = if let Some(accept_encoding) = request.headers.get(&HeaderName::AcceptEncoding) {
+            if let Some(accept_encoding) = accept_encoding.as_str_no_convert() {
+                cached.value().determine_best_version_from_accept_encoding(accept_encoding)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(encoding) = encoding {
+            response.headers.set(HeaderName::ContentEncoding, encoding.into());
+        }
+
         response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
         response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
-        response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value())));
+        response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value()), encoding));
         if let Ok(modified_date) = metadata.modified() {
             response.headers.set_last_modified(modified_date);
         }

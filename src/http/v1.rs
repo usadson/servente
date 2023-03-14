@@ -38,7 +38,7 @@ use crate::{
             StatusCodeClass,
         },
     },
-    ServenteConfig,
+    ServenteConfig, resources::ContentCoding,
 };
 
 /// The threshold at which the response body is transferred using chunked
@@ -143,8 +143,8 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
             TransferStrategy::Full
         }
 
-        BodyKind::CachedBytes(bytes) => {
-            response.headers.set_content_length(bytes.len());
+        BodyKind::CachedBytes(bytes, coding) => {
+            response.headers.set_content_length(bytes.get_version(*coding).len());
             TransferStrategy::Full
         }
 
@@ -528,8 +528,8 @@ async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option
 
 
     let start = Instant::now();
-    if let Some(response) = response.body {
-        match response {
+    if let Some(body) = response.body {
+        match body {
             BodyKind::File(mut response) => {
                 match transfer_strategy {
                     TransferStrategy::Full => transfer_body_full(stream, &mut response).await?,
@@ -540,7 +540,31 @@ async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option
                 }
             }
             BodyKind::Bytes(response) => stream.write_all(&response).await?,
-            BodyKind::CachedBytes(response) => stream.write_all(&response).await?,
+            BodyKind::CachedBytes(cached_version, encoding) => match encoding {
+                Some(ContentCoding::Brotli) => {
+                    if cached_version.brotli.is_some() {
+                        stream.write_all(cached_version.brotli.as_ref().unwrap()).await?;
+                    } else if let Some(compressed_on_the_fly) = ContentCoding::Brotli.encode(&cached_version.uncompressed) {
+                        stream.write_all(&compressed_on_the_fly).await?;
+                    } else {
+                        // TODO this isn't really a condition we should be in
+                        debug_assert!(false, "Brotli was set as the ContentEncoding, but the cached version was not brotli-compressed and we failed to compress it on the fly.");
+                        stream.write_all(&cached_version.uncompressed).await?;
+                    }
+                }
+                Some(ContentCoding::Gzip) => {
+                    if cached_version.gzip.is_some() {
+                        stream.write_all(cached_version.gzip.as_ref().unwrap()).await?;
+                    } else if let Some(compressed_on_the_fly) = ContentCoding::Gzip.encode(&cached_version.uncompressed) {
+                        stream.write_all(&compressed_on_the_fly).await?;
+                    } else {
+                        // TODO this isn't really a condition we should be in
+                        debug_assert!(false, "Gzip was set as the ContentEncoding, but the cached version was not gzip-compressed and we failed to compress it on the fly.");
+                        stream.write_all(&cached_version.uncompressed).await?;
+                    }
+                }
+                _ => stream.write_all(&cached_version.uncompressed).await?,
+            }
             BodyKind::StaticString(response) => stream.write_all(response.as_bytes()).await?,
             BodyKind::String(response) => stream.write_all(response.as_bytes()).await?,
         }

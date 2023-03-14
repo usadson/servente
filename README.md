@@ -3,23 +3,23 @@ A web server for static files written in Rust, used as a learning project and a 
 
 
 ## Feature Support Table
-| Feature               | Status | Description                                              | Notes                             |
-| --------------------- | ------ | -------------------------------------------------------- | --------------------------------- |
-| Accept-Ranges         | ✅     | Accepting range requests (especially useful for video's) | Fully supported                   |
-| Content-Encoding      | ❌     | Compressing data before sending                          | Not implemented yet               |
-| Custom API handlers   | 🤕     | Experimental API for adding custom handlers              | Experimental                      |
-| ETag Caching          | ✅     | Cache files using an identifier                          | Based on file modification date   |
-| HTTP/1.1              | ✅     | HTTP version every client supports                       | Compliant                         |
-| HTTP/2                | ❌     | Improved binary-format HTTP (2015)                       | Not implemented yet               |
-| HTTP/2 Server Push    | ❎     | Pushing resources to the client before requested         | Won't be implemented              |
-| HTTP/3                | ❌     | Improved binary-format HTTP (2022) with QUIC (UDP)       | Not implemented yet               |
-| io_uring              | 🚧     | Asynchronous I/O for Linux                               | Blocked #1                        |
-| ktls                  | 🚧     | Kernel TLS for Linux and FreeBSD                         | Blocked #2                        |
-| Memory Cache          | ✅     | Cache files in memory for faster access                  | Uses `stretto`                    |
-| OPTIONS method        | ❌     | Detecting server and resource capabilities               | Not implemented yet               |
-| TLS                   | ✅     | Transport Layer Security (HTTPS)                         | Uses rustls                       |
-| Transfer-Encoding     | ✅     | Sending data in chunks                                   | `chunked` encoding is supported   |
-| WebSockets            | ❌     | Real-time communication between client and server        | Not implemented yet               |
+| Feature               | Status | Description                                              | Notes                                 |
+| --------------------- | ------ | -------------------------------------------------------- | ------------------------------------- |
+| Accept-Ranges         | ✅     | Accepting range requests (especially useful for video's) | Fully supported                       |
+| Content-Encoding      | ✅     | Compressing data before sending                          | Fully implemented (brotli and gzip)   |
+| Custom API handlers   | 🤕     | Experimental API for adding custom handlers              | Experimental                          |
+| ETag Caching          | ✅     | Cache files using an identifier                          | Based on file modification date       |
+| HTTP/1.1              | ✅     | HTTP version every client supports                       | Compliant                             |
+| HTTP/2                | ❌     | Improved binary-format HTTP (2015)                       | Not implemented yet                   |
+| HTTP/2 Server Push    | ❎     | Pushing resources to the client before requested         | Won't be implemented                  |
+| HTTP/3                | ❌     | Improved binary-format HTTP (2022) with QUIC (UDP)       | Not implemented yet                   |
+| io_uring              | 🚧     | Asynchronous I/O for Linux                               | Blocked #1                            |
+| ktls                  | 🚧     | Kernel TLS for Linux and FreeBSD                         | Blocked #2                            |
+| Memory Cache          | ✅     | Cache files in memory for faster access                  | Uses `stretto`                        |
+| OPTIONS method        | ❌     | Detecting server and resource capabilities               | Not implemented yet                   |
+| TLS                   | ✅     | Transport Layer Security (HTTPS)                         | Uses rustls                           |
+| Transfer-Encoding     | ✅     | Sending data in chunks                                   | `chunked` encoding is supported       |
+| WebSockets            | ❌     | Real-time communication between client and server        | Not implemented yet                   |
 
 
 ## Building

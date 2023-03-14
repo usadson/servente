@@ -6,7 +6,11 @@ use std::{borrow::Cow, sync::Arc, time::{SystemTime, Duration}};
 use phf::phf_map;
 use unicase::UniCase;
 
-use crate::resources::MediaType;
+use crate::resources::{
+    ContentCoding,
+    compression::ContentEncodedVersions,
+    MediaType,
+};
 
 use super::hints::SecFetchDest;
 
@@ -501,6 +505,7 @@ impl HeaderName {
 pub enum HeaderValue {
     StaticString(&'static str),
     String(String),
+    ContentCoding(ContentCoding),
     ContentRange(ContentRangeHeaderValue),
     DateTime(SystemTime),
     MediaType(MediaType),
@@ -527,6 +532,9 @@ impl HeaderValue {
             }
             HeaderValue::String(string) => {
                 response_text.push_str(string);
+            }
+            HeaderValue::ContentCoding(content_coding) => {
+                response_text.push_str(content_coding.http_identifier());
             }
             HeaderValue::ContentRange(content_range) => {
                 response_text.push_str(&match content_range {
@@ -569,6 +577,12 @@ impl HeaderValue {
             HeaderValue::Size(size) => Some(*size),
             _ => None,
         }
+    }
+}
+
+impl From<ContentCoding> for HeaderValue {
+    fn from(content_coding: ContentCoding) -> HeaderValue {
+        HeaderValue::ContentCoding(content_coding)
     }
 }
 
@@ -858,7 +872,7 @@ pub struct Request {
 #[derive(Debug)]
 pub enum BodyKind {
     Bytes(Vec<u8>),
-    CachedBytes(Arc<Vec<u8>>),
+    CachedBytes(Arc<ContentEncodedVersions>, Option<ContentCoding>),
     File(tokio::fs::File),
     StaticString(&'static str),
     String(String),
