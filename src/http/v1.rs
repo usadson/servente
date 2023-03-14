@@ -329,7 +329,7 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         let name = name.trim().to_string();
         let value = value.trim().to_string();
 
-        let name = HeaderName::from_str(name);
+        let name = HeaderName::from(name);
         if let HeaderName::Other(name) = &name {
             #[cfg(debug_assertions)]
             println!("[DEBUG] Unknown header name: \"{}\" with value: \"{}\"", name, value);
@@ -431,7 +431,7 @@ async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error
 async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), Error>
         where R: AsyncBufReadExt + Unpin {
 
-    let method = Method::from_str(read_string_until_character(stream, b' ', MaximumLength::METHOD, HttpParseError::MethodTooLarge).await?);
+    let method = Method::from(read_string_until_character(stream, b' ', MaximumLength::METHOD, HttpParseError::MethodTooLarge).await?);
 
     // TODO skip OWS
     let target = read_request_target(stream).await?;

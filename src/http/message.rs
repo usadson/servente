@@ -376,19 +376,19 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
     UniCase::ascii("x-xss-protection") => HeaderName::XXSSProtection,
 );
 
-impl HeaderName {
-    pub fn from_str(string: String) -> HeaderName {
-        match STRING_TO_HEADER_NAME_MAP.get(&UniCase::ascii(&string)) {
+impl From<String> for HeaderName {
+    fn from(mut value: String) -> Self {
+        match STRING_TO_HEADER_NAME_MAP.get(&UniCase::ascii(&value)) {
             Some(header_name) => header_name.clone(),
             None => {
-                let mut string = string;
-
-                string.make_ascii_lowercase();
-                HeaderName::Other(string)
+                value.make_ascii_lowercase();
+                HeaderName::Other(value)
             }
         }
     }
+}
 
+impl HeaderName {
     pub fn to_string_h1(&self) -> &str {
         match self {
             HeaderName::Other(str) => str,
@@ -794,11 +794,20 @@ static METHOD_MAP: phf::Map<UniCase<&'static str>, Method> = phf_map!(
     UniCase::ascii("version-control") => Method::VersionControl,
 );
 
-impl Method {
-    pub fn from_str(string: String) -> Method {
-        match METHOD_MAP.get(&UniCase::ascii(&string)) {
+impl From<String> for Method {
+    fn from(value: String) -> Self {
+        match METHOD_MAP.get(&UniCase::ascii(&value)) {
             Some(method) => method.clone(),
-            None => Method::Other(string),
+            None => Method::Other(value),
+        }
+    }
+}
+
+impl From<&str> for Method {
+    fn from(value: &str) -> Self {
+        match METHOD_MAP.get(&UniCase::ascii(value)) {
+            Some(method) => method.clone(),
+            None => Method::Other(value.to_string()),
         }
     }
 }
