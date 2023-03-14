@@ -58,32 +58,30 @@ impl From<io::Error> for Error {
 }
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
-async fn check_not_modified(request: &Request, path: &Path, metadata: &fs::Metadata) -> Result<Option<Response>, io::Error> {
-    if let Ok(modified_date) = metadata.modified() {
-        if let Some(etag) = request.headers.get(&HeaderName::IfNoneMatch) {
-            if etag.as_str_no_convert().unwrap() == format_system_time_as_weak_etag(modified_date) {
-                let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
-                response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
-                response.headers.set(HeaderName::ETag, etag.clone());
-                return Ok(Some(response));
-            }
+async fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Result<Option<Response>, io::Error> {
+    if let Some(etag) = request.headers.get(&HeaderName::IfNoneMatch) {
+        if etag.as_str_no_convert().unwrap() == format_system_time_as_weak_etag(modified_date) {
+            let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
+            response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+            response.headers.set(HeaderName::ETag, etag.clone());
+            return Ok(Some(response));
         }
+    }
 
-        if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
-            if let Ok(if_modified_since_date) = if_modified_since.try_into() {
-                if let Ok(duration) = modified_date.duration_since(if_modified_since_date) {
-                    if duration.as_secs() == 0 {
-                        let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
-                        response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
-                        response.headers.set(HeaderName::LastModified, if_modified_since.to_owned());
-                        return Ok(Some(response));
-                    }
+    if let Some(if_modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
+        if let Ok(if_modified_since_date) = if_modified_since.try_into() {
+            if let Ok(duration) = modified_date.duration_since(if_modified_since_date) {
+                if duration.as_secs() == 0 {
+                    let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
+                    response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+                    response.headers.set(HeaderName::LastModified, if_modified_since.to_owned());
+                    return Ok(Some(response));
                 }
-
-                // The file modified time is somehow earlier than
-                // If-Modified-Date, but that's okay, since the normal file
-                // handler will handle it.
             }
+
+            // The file modified time is somehow earlier than
+            // If-Modified-Date, but that's okay, since the normal file
+            // handler will handle it.
         }
     }
 
@@ -185,16 +183,20 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
             return Ok(Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display())));
         }
 
-        if let Ok(metadata) = std::fs::metadata(&path) {
-            if metadata.is_file() {
-                return serve_file(request, &path, &metadata).await;
-            }
+        if let Some(served_file_response) = serve_file(request, &path).await? {
+            return Ok(served_file_response);
+        };
 
+        if let Ok(metadata) = std::fs::metadata(&path) {
             if metadata.is_dir() {
                 let path = path.join("index.html");
                 if let Ok(metadata) = std::fs::metadata(&path) {
                     if metadata.is_file() {
-                        return serve_file(request, &path, &metadata).await;
+                        drop(metadata);
+
+                        if let Some(served_file_response) = serve_file(request, &path).await? {
+                            return Ok(served_file_response);
+                        }
                     }
                 }
             }
@@ -270,12 +272,14 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
     Ok(response)
 }
 
-async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> Result<Response, Error> {
-    if let Some(not_modified_response) = check_not_modified(request, path, metadata).await? {
-        return Ok(not_modified_response);
-    }
-
+async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, Error> {
     if let Some(cached) = cache::FILE_CACHE.get(path.to_string_lossy().as_ref()) {
+        if let Some(modified_date) = cached.value().modified_date {
+            if let Some(not_modified_response) = check_not_modified(request, path, modified_date).await? {
+                return Ok(Some(not_modified_response));
+            }
+        }
+
         let mut response = Response::with_status(StatusCode::Ok);
 
         let encoding = if let Some(accept_encoding) = request.headers.get(&HeaderName::AcceptEncoding) {
@@ -295,14 +299,18 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
         response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
         response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
         response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value()), encoding));
-        if let Ok(modified_date) = metadata.modified() {
+        if let Some(modified_date) = cached.value().modified_date {
             response.headers.set_last_modified(modified_date);
         }
-        return Ok(response);
+        return Ok(Some(response));
     }
 
-    let file = tokio::fs::File::open(&path).await?;
+    let file = tokio::fs::File::open(path).await?;
     cache::maybe_cache_file(path).await;
+
+    let Ok(metadata) = file.metadata().await else {
+        return Ok(None);
+    };
 
     let mut response = Response::with_status(StatusCode::Ok);
     response.body = Some(BodyKind::File(file));
@@ -329,7 +337,7 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
         });
     }
 
-    Ok(response)
+    Ok(Some(response))
 }
 
 /// Serve the welcome page response with a 304 Not Modified status code.

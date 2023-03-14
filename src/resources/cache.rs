@@ -52,10 +52,15 @@ pub async fn maybe_cache_file(path: &Path) {
                 return;
             }
 
+            let modified_date = metadata.modified().ok();
             let mut data = Vec::with_capacity(metadata.len() as usize);
+            drop(metadata);
+
             _ = file.read_to_end(&mut data).await;
 
-            let cached = ContentEncodedVersions::create(data);
+            let mut cached = ContentEncodedVersions::create(data);
+            cached.modified_date = modified_date;
+
             FILE_CACHE.insert_with_ttl(path.to_string_lossy().to_string(), Arc::new(cached), 0, DEFAULT_CACHE_DURATION).await;
             println!("Cached file: {} in {} seconds", path.to_string_lossy(), (start.elapsed()).as_secs_f32());
         }
