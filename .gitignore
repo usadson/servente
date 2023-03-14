@@ -9,3 +9,5 @@ dhat*
 out.*
 *.out
 *.out.*
+*.data
+perf.*
