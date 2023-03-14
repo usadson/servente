@@ -17,6 +17,7 @@ mod client;
 mod example_handlers;
 mod handler;
 pub mod http;
+mod platform;
 mod resources;
 
 #[derive(Clone)]
@@ -78,7 +79,9 @@ async fn main() -> io::Result<()> {
         resources::cache::start(&wwwroot_path_cacher).await
     });
 
-    _ = join_handle.await.unwrap();
+    if let Err(e) = join_handle.await.unwrap() {
+        println!("Server error (HTTP/1.1): {}", e);
+    }
 
     #[cfg(feature = "http3")]
     {

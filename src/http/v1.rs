@@ -673,7 +673,21 @@ pub async fn start(address: &str, config: ServenteConfig) -> io::Result<()> {
     println!("Started listening on {}", address);
 
     loop {
-        let (stream, _) = listener.accept().await?;
+        let (stream, _) = match listener.accept().await {
+            Ok((stream, addr)) => (stream, addr),
+            Err(e) => {
+                #[cfg(unix)]
+                if let Some(os_error) = e.raw_os_error() {
+                    if os_error == crate::platform::unix::ERRNO_EMFILE {
+                        task::yield_now().await;
+                        continue;
+                    }
+                }
+
+                println!("[FATAL] Error accepting connection: {}", e);
+                continue;
+            }
+        };
         let config = config.clone();
         task::spawn(async move {
             process_socket(stream, config.clone()).await;

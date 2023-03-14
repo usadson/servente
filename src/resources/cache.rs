@@ -13,7 +13,7 @@ use tokio::io::AsyncReadExt;
 use super::compression::ContentEncodedVersions;
 
 /// The maximum size of a file that can be cached in memory.
-const FILE_CACHE_MAXIMUM_SIZE: u64 = 500_000; // 50 MB
+const FILE_CACHE_MAXIMUM_SIZE: u64 = 50_000_000; // 50 MB
 
 /// The default cache duration for files. This is 1 hour.
 const DEFAULT_CACHE_DURATION: Duration = Duration::from_secs(60 * 60);
