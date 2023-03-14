@@ -95,8 +95,8 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
             let file_size = file.metadata().await.unwrap().len();
             if let Some(ranges) = ranges {
                 response.status = StatusCode::PartialContent;
-                if ranges.ranges.len() == 1 {
-                    match ranges.ranges.first().unwrap() {
+                if let Some(range) = ranges.first_and_only() {
+                    match range {
                         Range::Full => {
                             response.headers.set_content_range(ContentRangeHeaderValue::Range {
                                 start: 0,
@@ -106,14 +106,14 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
                         }
                         Range::Points { start, end } => {
                             response.headers.set_content_range(ContentRangeHeaderValue::Range {
-                                start: *start as _,
-                                end: *end as _,
+                                start: start as _,
+                                end: end as _,
                                 complete_length: Some(file_size as _),
                             });
                         }
                         Range::StartPointToEnd { start } => {
                             response.headers.set_content_range(ContentRangeHeaderValue::Range {
-                                start: *start as _,
+                                start: start as _,
                                 end: (file_size - 1) as _,
                                 complete_length: Some(file_size as _),
                             });
@@ -127,7 +127,7 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
                         }
                     }
                 } else {
-                    todo!();
+                    todo!("Support multiple ranges");
                 }
 
                 return TransferStrategy::Ranges { ranges };
@@ -188,7 +188,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
             match error {
                 Error::ParseError(error) => {
                     let mut response = handle_parse_error(error).await;
-                    finish_response_error(&mut response).await.unwrap();
+                    finish_response_error(&mut response).await?;
                     send_response(writer, response, None).await?;
                     return Err(io::Error::new(io::ErrorKind::InvalidData, "Parse error"));
                 }
@@ -204,7 +204,7 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, config: &Servente
         match error {
             Error::ParseError(error) => {
                 let mut response = handle_parse_error(error).await;
-                finish_response_error(&mut response).await.unwrap();
+                finish_response_error(&mut response).await?;
                 send_response(writer, response, None).await?;
                 return Err(io::Error::new(io::ErrorKind::InvalidData, "Parse error"));
             }
@@ -262,7 +262,10 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
                 return;
             }
 
-            send_http_upgrade(&mut stream).await.unwrap();
+            if send_http_upgrade(&mut stream).await.is_err() {
+                _ = stream.shutdown().await;
+                return;
+            }
         }
     }
 
@@ -320,9 +323,11 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
             return Ok(HeaderMap::new_with_vec(headers));
         }
 
-        let mut parts = line.splitn(2, ':');
-        let name = parts.next().unwrap().trim().to_string();
-        let value = parts.next().unwrap().trim().to_string();
+        let Some((name, value)) = line.split_once(':') else {
+            return Err(Error::ParseError(HttpParseError::HeaderDoesNotContainColon));
+        };
+        let name = name.trim().to_string();
+        let value = value.trim().to_string();
 
         let name = HeaderName::from_str(name);
         if let HeaderName::Other(name) = &name {
@@ -454,7 +459,7 @@ async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
     if str.starts_with('/') {
         let mut parts = str.splitn(2, '?');
         return Ok(RequestTarget::Origin {
-            path: parts.next().unwrap().to_string(),
+            path: parts.next().unwrap_or("").to_string(),
             query: parts.next().unwrap_or("").to_string(),
         });
     }

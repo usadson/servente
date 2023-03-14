@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{borrow::Cow, sync::Arc, time::SystemTime};
+use std::{borrow::Cow, sync::Arc, time::{SystemTime, Duration}};
 
 use phf::phf_map;
 use unicase::UniCase;
@@ -613,7 +613,7 @@ impl TryInto<SystemTime> for &HeaderValue {
     fn try_into(self) -> Result<SystemTime, Self::Error> {
         match self {
             HeaderValue::StaticString(string) => httpdate::parse_http_date(string).map_err(|_| HeaderValueDateTimeParseError::InvalidFormat),
-            HeaderValue::String(string) => httpdate::parse_http_date(&string).map_err(|_| HeaderValueDateTimeParseError::InvalidFormat),
+            HeaderValue::String(string) => httpdate::parse_http_date(string).map_err(|_| HeaderValueDateTimeParseError::InvalidFormat),
             HeaderValue::DateTime(date_time) => Ok(*date_time),
             _ => Err(HeaderValueDateTimeParseError::InvalidFormat),
         }
@@ -675,7 +675,7 @@ impl HeaderMap {
 }
 
 pub fn format_system_time_as_weak_etag(date_time: SystemTime) -> String {
-    format!("W/{:X}", date_time.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs())
+    format!("W/{:X}", date_time.duration_since(SystemTime::UNIX_EPOCH).unwrap_or(Duration::default()).as_secs())
 }
 
 //
@@ -940,6 +940,16 @@ impl HttpRangeList {
             ranges.push(range);
         }
         Some(Self { ranges })
+    }
+
+    /// Returns the first and only range if there is only one range.
+    /// Otherwise, when there are 0 or more than one, returns `None`.
+    pub fn first_and_only(&self) -> Option<Range> {
+        if self.ranges.len() == 1 {
+            Some(self.ranges[0])
+        } else {
+            None
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Range> {

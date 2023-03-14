@@ -153,6 +153,7 @@ pub async fn finish_response_normal(request: &Request, response: &mut Response) 
 /// Handles a `HttpParseError`.
 pub async fn handle_parse_error(error: HttpParseError) -> Response {
     match error {
+        HttpParseError::HeaderDoesNotContainColon => Response::bad_request("Invalid header format"),
         HttpParseError::HeaderTooLarge => Response::with_status_and_string_body(StatusCode::RequestHeaderFieldsTooLarge, "Request Header Fields Too Large"),
         HttpParseError::InvalidContentLength => Response::bad_request("Malformed Content-Length"),
         HttpParseError::InvalidCRLF => Response::bad_request("Invalid CRLF"),
@@ -176,8 +177,16 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
             return Ok(Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed"));
         }
 
-        let root = current_dir().unwrap().join("wwwroot/");
-        let path = root.join(urlencoding::decode(&request_target[1..]).unwrap().into_owned());
+        let Ok(current_directory) = current_dir() else {
+            return handle_welcome_page(request, request_target).await;
+        };
+
+        let root = current_directory.join("wwwroot/");
+        let Ok(url_decoded) = urlencoding::decode(&request_target[1..]) else {
+            return Ok(Response::with_status_and_string_body(StatusCode::BadRequest, "Bad Request"));
+        };
+
+        let path = root.join(url_decoded.into_owned());
         if !path.starts_with(&root) {
             return Ok(Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display())));
         }
@@ -214,8 +223,10 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
         if let Some(modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
             if let Some(modified_since) = modified_since.as_str_no_convert() {
                 if let Ok(modified_since) = httpdate::parse_http_date(modified_since) {
-                    if SystemTime::UNIX_EPOCH.duration_since(modified_since).unwrap().as_secs() < 600 {
-                        return Ok(serve_welcome_page_not_modified(request));
+                    if let Ok(duration) = SystemTime::UNIX_EPOCH.duration_since(modified_since) {
+                        if duration.as_secs() < 600 {
+                            return Ok(serve_welcome_page_not_modified(request));
+                        }
                     }
                 }
             }
@@ -276,16 +287,16 @@ async fn maybe_cache_file(path: &Path) {
     let path = path.to_owned();
 
     tokio::task::spawn(async move {
-        let metadata = file.metadata().await.unwrap();
+        if let Ok(metadata) = file.metadata().await {
+            if metadata.len() > FILE_CACHE_MAXIMUM_SIZE {
+                return;
+            }
 
-        if metadata.len() > FILE_CACHE_MAXIMUM_SIZE {
-            return;
+            let mut data = Vec::with_capacity(metadata.len() as usize);
+            _ = file.read_to_end(&mut data).await;
+
+            FILE_CACHE.insert_with_ttl(path.to_string_lossy().to_string(), Arc::new(data), 0, Duration::from_secs(60)).await;
         }
-
-        let mut data = Vec::with_capacity(metadata.len() as usize);
-        _ = file.read_to_end(&mut data).await;
-
-        FILE_CACHE.insert_with_ttl(path.to_str().unwrap().to_string(), Arc::new(data), 0, Duration::from_secs(60)).await;
     });
 }
 

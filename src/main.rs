@@ -1,6 +1,13 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+// #![warn(
+//     missing_docs,
+//     clippy::missing_docs_in_private_items,
+//     clippy::missing_errors_doc,
+//     clippy::missing_panics_doc
+// )]
+
 use tokio::task;
 
 use std::{io, sync::Arc, time::Instant};
@@ -31,7 +38,7 @@ async fn main() -> io::Result<()> {
         .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(cert_data.certs, cert_data.private_key)
-        .unwrap();
+        .expect("Failed to build rustls configuration!");
 
     // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
     tls_config.alpn_protocols = vec![b"http/1.1".to_vec(), b"h2".to_vec(), b"h3".to_vec()];

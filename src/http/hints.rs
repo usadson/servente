@@ -115,7 +115,7 @@ impl<'a> AcceptedLanguages<'a> {
                 .unwrap_or(1.0);
             ranges.push(LanguageRange { language, q });
         }
-        ranges.sort_by(|a, b| b.q.partial_cmp(&a.q).unwrap());
+        ranges.sort_by(|a, b| b.q.partial_cmp(&a.q).unwrap_or(std::cmp::Ordering::Equal));
         Some(AcceptedLanguages { ranges })
     }
 
