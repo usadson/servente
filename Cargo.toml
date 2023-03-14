@@ -23,12 +23,16 @@ unicase = "*"
 urlencoding = "*"
 
 # Optional dependencies
+notify = { version = "*", optional = true }
 quinn = { version = "*", features = ["rustls"], optional = true }
 
 [features]
-default = []
+default = ["watch"]
 debugging = []
 http3 = ["dep:quinn"]
+
+# Watch for changes in the filesystem
+watch = ["dep:notify"]
 
 [profile.release]
 opt-level = 3

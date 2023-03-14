@@ -6,16 +6,12 @@ use std::{
     io,
     path::Path,
     sync::Arc,
-    time::{SystemTime, Duration}, env::current_dir,
+    time::SystemTime, env::current_dir,
 };
-
-use lazy_static::lazy_static;
-use stretto::AsyncCache;
-use tokio::io::AsyncReadExt;
 
 use crate::{
     resources::{
-        compression::ContentEncodedVersions,
+        cache,
         MediaType,
         static_res,
     },
@@ -42,16 +38,6 @@ pub mod v1;
 
 #[cfg(feature = "http3")]
 pub mod v3;
-
-/// The maximum size of a file that can be cached in memory.
-const FILE_CACHE_MAXIMUM_SIZE: u64 = 50_000_000; // 50 MB
-
-/// The default cache duration for files. This is 1 hour.
-const DEFAULT_CACHE_DURATION: Duration = Duration::from_secs(60 * 60);
-
-lazy_static! {
-    static ref FILE_CACHE: AsyncCache<String, Arc<ContentEncodedVersions>> = AsyncCache::new(12960, 1e6 as i64, tokio::spawn).unwrap();
-}
 
 #[derive(Debug)]
 pub enum Error {
@@ -284,37 +270,12 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
     Ok(response)
 }
 
-/// Initiated by a request that didn't have this file in cache. This function
-/// will check for the right conditions and stores the file in the cache if
-/// necessary.
-async fn maybe_cache_file(path: &Path) {
-    let Ok(mut file) = tokio::fs::File::open(path).await else {
-        return;
-    };
-
-    let path = path.to_owned();
-
-    tokio::task::spawn(async move {
-        if let Ok(metadata) = file.metadata().await {
-            if metadata.len() > FILE_CACHE_MAXIMUM_SIZE {
-                return;
-            }
-
-            let mut data = Vec::with_capacity(metadata.len() as usize);
-            _ = file.read_to_end(&mut data).await;
-
-            let cached = ContentEncodedVersions::create(data);
-            FILE_CACHE.insert_with_ttl(path.to_string_lossy().to_string(), Arc::new(cached), 0, DEFAULT_CACHE_DURATION).await;
-        }
-    });
-}
-
 async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> Result<Response, Error> {
     if let Some(not_modified_response) = check_not_modified(request, path, metadata).await? {
         return Ok(not_modified_response);
     }
 
-    if let Some(cached) = FILE_CACHE.get(path.to_string_lossy().as_ref()) {
+    if let Some(cached) = cache::FILE_CACHE.get(path.to_string_lossy().as_ref()) {
         let mut response = Response::with_status(StatusCode::Ok);
 
         let encoding = if let Some(accept_encoding) = request.headers.get(&HeaderName::AcceptEncoding) {
@@ -341,7 +302,7 @@ async fn serve_file(request: &Request, path: &Path, metadata: &fs::Metadata) -> 
     }
 
     let file = tokio::fs::File::open(&path).await?;
-    maybe_cache_file(path).await;
+    cache::maybe_cache_file(path).await;
 
     let mut response = Response::with_status(StatusCode::Ok);
     response.body = Some(BodyKind::File(file));

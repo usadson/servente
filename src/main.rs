@@ -10,7 +10,7 @@
 
 use tokio::task;
 
-use std::{io, sync::Arc, time::Instant};
+use std::{io, sync::Arc, time::Instant, env::current_dir};
 
 mod cert;
 mod client;
@@ -31,6 +31,8 @@ unsafe impl Sync for ServenteConfig {}
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let start = Instant::now();
+
+    let wwwroot_path = current_dir().unwrap().join("wwwroot");
 
     let cert_data = cert::load_certificate_locations();
 
@@ -66,12 +68,19 @@ async fn main() -> io::Result<()> {
         http::v3::start(config_v3.tls_config).await
     });
 
+    let wwwroot_path_cacher = wwwroot_path.clone();
+    let join_handle_cache = task::spawn(async move {
+        resources::cache::start(&wwwroot_path_cacher).await
+    });
+
     _ = join_handle.await.unwrap();
 
     #[cfg(feature = "http3")]
     {
         _ = join_handle_v3.await.unwrap();
     }
+
+    join_handle_cache.abort();
 
     println!("Stopped after {} ms", start.elapsed().as_millis());
     Ok(())
