@@ -654,6 +654,12 @@ impl HeaderMap {
         HeaderMap { headers }
     }
 
+    /// Appends a header to the list of headers. This is used for headers that
+    /// can be duplicated, such as `Set-Cookie` and `Link`.
+    pub fn append_possible_duplicate(&mut self, header_name: HeaderName, value: HeaderValue) {
+        self.headers.push((header_name, value));
+    }
+
     #[must_use]
     pub fn contains(&self, header_name: &HeaderName) -> bool {
         for (name, _) in &self.headers {

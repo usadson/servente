@@ -64,8 +64,10 @@ impl ContentCoding {
 
 /// A struct that contains multiple encoded/compressed versions of the same
 /// resource.
+#[derive(Default)]
 pub struct ContentEncodedVersions {
     pub modified_date: Option<SystemTime>,
+    pub cache_details: Option<super::cache::CacheDetails>,
 
     /// The uncompressed version of the resource.
     pub uncompressed: Vec<u8>,
@@ -96,10 +98,8 @@ fn should_compress_file(uncompressed: &Vec<u8>) -> bool {
 impl ContentEncodedVersions {
     pub fn create(uncompressed: Vec<u8>) -> Self {
         let mut result = ContentEncodedVersions {
-            modified_date: None,
             uncompressed,
-            brotli: None,
-            gzip: None,
+            ..Default::default()
         };
 
         if should_compress_file(&result.uncompressed) {
@@ -255,10 +255,8 @@ mod tests {
     #[test]
     pub fn determine_smallest_file_size_only_uncompressed() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1, 2, 3, 4, 5],
-            brotli: None,
-            gzip: None,
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_smallest_file_size(), None);
@@ -267,10 +265,10 @@ mod tests {
     #[test]
     pub fn determine_smallest_file_size_uncompressed_smaller() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1, 2, 3, 4, 5],
             brotli: Some(vec![1, 2, 3, 4, 5, 6]),
             gzip: Some(vec![1, 2, 3, 4, 5, 6, 7]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_smallest_file_size(), None);
@@ -281,10 +279,10 @@ mod tests {
     #[test]
     pub fn determine_smallest_file_size_brotli_smaller() {
         let mut versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1, 2, 3, 4, 5, 6, 7],
             brotli: Some(vec![1, 2, 3, 4, 5, 6]),
             gzip: Some(vec![1, 2, 3, 4, 5, 6, 7, 8]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_smallest_file_size(), Some(ContentCoding::Brotli));
@@ -299,10 +297,10 @@ mod tests {
     #[test]
     pub fn determine_smallest_file_size_gzip_smaller() {
         let mut versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1, 2, 3, 4, 5, 6, 7, 8],
             brotli: Some(vec![1, 2, 3, 4, 5, 6, 7]),
             gzip: Some(vec![1, 2, 3, 4, 5, 6]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_smallest_file_size(), Some(ContentCoding::Gzip));
@@ -316,10 +314,10 @@ mod tests {
     #[test]
     pub fn determine_smallest_file_size_brotli_and_gzip_smaller() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
             brotli: Some(vec![1, 2, 3, 4, 5, 6, 7]),
             gzip: Some(vec![1, 2, 3, 4, 5, 6]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_smallest_file_size(), Some(ContentCoding::Gzip));
@@ -330,10 +328,10 @@ mod tests {
     #[test]
     pub fn determine_smallest_file_size_brotli_and_gzip_smaller_2() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
             brotli: Some(vec![1, 2, 3, 4, 5, 6, 7]),
             gzip: Some(vec![1, 2, 3, 4, 5, 6, 7, 8]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_smallest_file_size(), Some(ContentCoding::Brotli));
@@ -344,10 +342,10 @@ mod tests {
     #[test]
     pub fn determine_smallest_file_size_brotli_preference() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
             brotli: Some(vec![1, 2, 3, 4, 5, 6, 7]),
             gzip: Some(vec![1, 2, 3, 4, 5, 6, 7]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_smallest_file_size(), Some(ContentCoding::Brotli));
@@ -358,10 +356,10 @@ mod tests {
     #[test]
     pub fn determine_smallest_file_size_all_the_same_size() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1],
             brotli: Some(vec![1]),
             gzip: Some(vec![1]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_smallest_file_size(), None);
@@ -370,10 +368,10 @@ mod tests {
     #[test]
     pub fn get_version() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1],
             brotli: Some(vec![2, 3]),
             gzip: Some(vec![4, 5, 6]),
+            ..Default::default()
         };
 
         assert_eq!(versions.get_version(None), &versions.uncompressed);
@@ -384,10 +382,10 @@ mod tests {
     #[test]
     pub fn determine_best_version_from_accept_encoding() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1],
             brotli: Some(vec![2, 3]),
             gzip: Some(vec![4, 5, 6]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_best_version_from_accept_encoding(""), None, "with empty accept-encoding, but uncompressed is still smaller");
@@ -399,10 +397,10 @@ mod tests {
     #[ignore = "fixme"]
     pub fn determine_best_version_from_accept_encoding_brotli() {
         let versions = ContentEncodedVersions {
-            modified_date: None,
             uncompressed: vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
             brotli: Some(vec![1, 2, 3, 4, 5, 6, 7]),
             gzip: Some(vec![1, 2, 3, 4, 5, 6, 7, 8]),
+            ..Default::default()
         };
 
         assert_eq!(versions.determine_best_version_from_accept_encoding("brotli"), Some(ContentCoding::Brotli), "with brotli");

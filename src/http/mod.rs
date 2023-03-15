@@ -2,7 +2,6 @@
 // All Rights Reserved.
 
 use std::{
-    fs,
     io,
     path::Path,
     sync::Arc,
@@ -11,7 +10,10 @@ use std::{
 
 use crate::{
     resources::{
-        cache,
+        cache::{
+            self,
+            CacheDetails,
+        },
         MediaType,
         static_res,
     },
@@ -20,15 +22,19 @@ use crate::{
 
 use self::{
     error::HttpParseError,
+    hints::AcceptedLanguages,
     message::{
         BodyKind,
         HeaderName,
         HeaderValue,
+        Method,
         Request,
+        RequestTarget,
         Response,
         StatusCode,
-        StatusCodeClass, HeaderMap, RequestTarget, Method, format_system_time_as_weak_etag,
-    }, hints::{AcceptedLanguages, SecFetchDest},
+        StatusCodeClass,
+        format_system_time_as_weak_etag,
+    },
 };
 
 pub mod error;
@@ -89,13 +95,13 @@ async fn check_not_modified(request: &Request, path: &Path, modified_date: Syste
 }
 
 /// Finishes a response for an error response.
-pub async fn finish_response_error(response: &mut Response) -> Result<(), io::Error>{
+pub async fn finish_response_error(response: &mut Response) -> Result<(), io::Error> {
     response.headers.set(HeaderName::Connection, HeaderValue::from("close"));
     finish_response_general(response).await
 }
 
 /// Finishes a response for both normal and error response.
-async fn finish_response_general(response: &mut Response) -> Result<(), io::Error>{
+async fn finish_response_general(response: &mut Response) -> Result<(), io::Error> {
     if let Some(body) = &response.body {
         if !response.headers.contains(&HeaderName::LastModified) {
             if let BodyKind::File(file) = body {
@@ -126,7 +132,7 @@ async fn finish_response_general(response: &mut Response) -> Result<(), io::Erro
 }
 
 /// Finishes a response for a normal (OK) response.
-pub async fn finish_response_normal(request: &Request, response: &mut Response) -> Result<(), io::Error>{
+pub async fn finish_response_normal(request: &Request, response: &mut Response) -> Result<(), io::Error> {
     if response.body.is_some() {
         if !response.headers.contains(&HeaderName::ContentType) {
             response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(request.target.as_str()).clone()));
@@ -302,10 +308,19 @@ async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, 
         if let Some(modified_date) = cached.value().modified_date {
             response.headers.set_last_modified(modified_date);
         }
+
+        if let Some(CacheDetails::Document { link_preloads }) = &cached.value().cache_details{
+            for link_preload in link_preloads {
+                response.headers.append_possible_duplicate(HeaderName::Link, link_preload.clone().into());
+            }
+        }
+
         return Ok(Some(response));
     }
 
-    let file = tokio::fs::File::open(path).await?;
+    let Ok(file) = tokio::fs::File::open(path).await else {
+        return Ok(None);
+    };
     cache::maybe_cache_file(path).await;
 
     let Ok(metadata) = file.metadata().await else {
@@ -320,22 +335,6 @@ async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, 
     }
 
     response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
-
-    if request.headers.sec_fetch_dest() == Some(SecFetchDest::Document) {
-        response.prelude_response.push(Response{
-            version: request.version,
-            status: StatusCode::EarlyHints,
-            headers: HeaderMap::new_with_vec(vec![
-                (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/spec.css>; rel=preload; as=style")),
-                (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard.css>; rel=preload; as=style")),
-                (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/standard-shared-with-dev.css>; rel=preload; as=style")),
-                (HeaderName::Link, HeaderValue::from("<HTML%20Standard_bestanden/styles.css>; rel=preload; as=style")),
-                (HeaderName::Link, HeaderValue::from("<script.js>; rel=preload; as=script")),
-            ]),
-            body: None,
-            prelude_response: vec![],
-        });
-    }
 
     Ok(Some(response))
 }

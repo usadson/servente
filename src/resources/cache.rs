@@ -22,6 +22,13 @@ lazy_static! {
     pub static ref FILE_CACHE: AsyncCache<String, Arc<ContentEncodedVersions>> = AsyncCache::new(12960, 1e6 as i64, tokio::spawn).unwrap();
 }
 
+pub enum CacheDetails {
+    None,
+    Document {
+        link_preloads: Vec<String>,
+    },
+}
+
 /// Caches all the applicable files on startup.
 fn cache_files_on_startup(path: &Path) -> Result<(), std::io::Error> {
     for path in std::fs::read_dir(path)? {

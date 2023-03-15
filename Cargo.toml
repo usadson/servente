@@ -24,12 +24,15 @@ urlencoding = "*"
 
 
 # Optional dependencies
+scraper = { version = "*", optional = true }
 notify = { version = "*", optional = true }
 quinn = { version = "*", features = ["rustls"], optional = true }
 ktls = { version = "*", optional = true }
 
 [features]
-default = ["watch"]
+default = ["analysis", "watch"]
+
+analysis = ["dep:scraper"]
 debugging = []
 ktls = ["dep:ktls"]
 http3 = ["dep:quinn"]
