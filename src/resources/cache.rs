@@ -55,7 +55,7 @@ pub async fn maybe_cache_file(path: &Path) {
 
     tokio::task::spawn(async move {
         if let Ok(metadata) = file.metadata().await {
-            if metadata.len() > FILE_CACHE_MAXIMUM_SIZE {
+            if !metadata.is_file() || metadata.len() > FILE_CACHE_MAXIMUM_SIZE {
                 return;
             }
 
