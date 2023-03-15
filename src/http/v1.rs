@@ -181,8 +181,8 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
     };
 
     match body {
-        BodyKind::File(file) => {
-            let file_size = file.metadata().await.unwrap().len();
+        BodyKind::File { metadata, .. } => {
+            let file_size = metadata.len();
             if let Some(ranges) = ranges {
                 response.status = StatusCode::PartialContent;
                 if let Some(range) = ranges.first_and_only() {
@@ -324,8 +324,7 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
     };
     finish_response_normal(&request, &mut response).await?;
 
-    if let Some(BodyKind::File(file)) = &response.body {
-        let metadata = file.metadata().await?;
+    if let Some(BodyKind::File { metadata, .. }) = &response.body {
         if !metadata.is_file() {
             let mut response = Response::with_status(StatusCode::InternalServerError);
 
@@ -750,12 +749,12 @@ async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option
     let start = Instant::now();
     if let Some(body) = response.body {
         match body {
-            BodyKind::File(mut response) => {
+            BodyKind::File { mut handle, .. } => {
                 match transfer_strategy {
-                    TransferStrategy::Full => transfer_body_full(stream, &mut response).await?,
-                    TransferStrategy::Chunked => transfer_body_chunked(stream, &mut response).await?,
+                    TransferStrategy::Full => transfer_body_full(stream, &mut handle).await?,
+                    TransferStrategy::Chunked => transfer_body_chunked(stream, &mut handle).await?,
                     TransferStrategy::Ranges { ranges } => {
-                        transfer_body_ranges(stream, &mut response, ranges).await?
+                        transfer_body_ranges(stream, &mut handle, ranges).await?
                     }
                 }
             }

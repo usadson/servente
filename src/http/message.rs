@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::{borrow::Cow, sync::Arc, time::{SystemTime, Duration}};
+use std::{borrow::Cow, sync::Arc, time::{SystemTime, Duration}, fs::Metadata};
 
 use phf::phf_map;
 use unicase::UniCase;
@@ -879,7 +879,10 @@ pub struct Request {
 pub enum BodyKind {
     Bytes(Vec<u8>),
     CachedBytes(Arc<ContentEncodedVersions>, Option<ContentCoding>),
-    File(tokio::fs::File),
+    File {
+        handle: tokio::fs::File,
+        metadata: Metadata,
+    },
     StaticString(&'static str),
     String(String),
 }

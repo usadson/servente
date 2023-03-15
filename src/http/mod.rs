@@ -108,11 +108,9 @@ pub async fn finish_response_error(response: &mut Response) -> Result<(), io::Er
 async fn finish_response_general(response: &mut Response) -> Result<(), io::Error> {
     if let Some(body) = &response.body {
         if !response.headers.contains(&HeaderName::LastModified) {
-            if let BodyKind::File(file) = body {
-                if let Ok(metadata) = file.metadata().await {
-                    if let Ok(modified_date) = metadata.modified() {
-                        response.headers.set_last_modified(modified_date);
-                    }
+            if let BodyKind::File { metadata, ..} = body {
+                if let Ok(modified_date) = metadata.modified() {
+                    response.headers.set_last_modified(modified_date);
                 }
             }
         }
@@ -318,12 +316,12 @@ async fn serve_file_from_disk(path: &Path) -> Result<Option<Response>, Error> {
     cache::maybe_cache_file(path).await;
 
     let mut response = Response::with_status(StatusCode::Ok);
-    response.body = Some(BodyKind::File(file));
 
     if let Ok(modified_date) = metadata.modified() {
         response.headers.set_last_modified(modified_date);
     }
 
+    response.body = Some(BodyKind::File { handle: file, metadata });
     response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
 
     Ok(Some(response))
