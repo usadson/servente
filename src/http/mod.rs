@@ -321,11 +321,16 @@ async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, 
     let Ok(file) = tokio::fs::File::open(path).await else {
         return Ok(None);
     };
-    cache::maybe_cache_file(path).await;
 
     let Ok(metadata) = file.metadata().await else {
         return Ok(None);
     };
+
+    if !metadata.is_file() {
+        return Ok(None);
+    }
+
+    cache::maybe_cache_file(path).await;
 
     let mut response = Response::with_status(StatusCode::Ok);
     response.body = Some(BodyKind::File(file));
