@@ -303,6 +303,24 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
     };
     finish_response_normal(&request, &mut response).await?;
 
+    if let Some(BodyKind::File(file)) = &response.body {
+        let metadata = file.metadata().await?;
+        if !metadata.is_file() {
+            let mut response = Response::with_status(StatusCode::InternalServerError);
+
+            #[cfg(feature = "debugging")]
+            {
+                dbg!("Warning: tried to send a non-file as response body: {}", metadata);
+                response.body = Some(BodyKind::StaticString("Warning: tried to send a non-file as response body"));
+            }
+
+            finish_response_error(&mut response).await?;
+            send_response(connection.buf_writer, response, None).await?;
+
+            return Ok(());
+        }
+    }
+
     for response in response.prelude_response {
         send_response(connection.buf_writer, response, None).await?;
     }
