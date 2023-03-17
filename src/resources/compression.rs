@@ -67,7 +67,7 @@ impl ContentCoding {
 #[derive(Default)]
 pub struct ContentEncodedVersions {
     pub modified_date: Option<SystemTime>,
-    pub cache_details: Option<super::cache::CacheDetails>,
+    pub cache_details: Option<super::cache::CachedFileDetails>,
 
     /// The uncompressed version of the resource.
     pub uncompressed: Vec<u8>,

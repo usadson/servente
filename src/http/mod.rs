@@ -12,7 +12,7 @@ use crate::{
     resources::{
         cache::{
             self,
-            CacheDetails,
+            CachedFileDetails,
         },
         MediaType,
         static_res,
@@ -309,7 +309,7 @@ async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, 
             response.headers.set_last_modified(modified_date);
         }
 
-        if let Some(CacheDetails::Document { link_preloads }) = &cached.value().cache_details{
+        if let Some(CachedFileDetails::Document { link_preloads }) = &cached.value().cache_details{
             for link_preload in link_preloads {
                 response.headers.append_possible_duplicate(HeaderName::Link, link_preload.clone().into());
             }
