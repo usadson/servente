@@ -12,3 +12,5 @@ out.*
 *.data
 perf.*
 flamegraph*
+# LLVM profile data
+*.profraw
