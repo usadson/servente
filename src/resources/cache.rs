@@ -118,6 +118,11 @@ pub async fn maybe_cache_file(path: &Path) {
     let path = path.to_owned();
 
     tokio::task::spawn(async move {
+        // Check if the file is allowed to be served.
+        if !super::is_file_allowed_to_be_served(path.to_string_lossy().as_ref()) {
+            return;
+        }
+
         let path = Arc::new(path);
 
         if is_file_being_cached(&path) {

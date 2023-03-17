@@ -10,6 +10,7 @@ use std::{
 
 use crate::{
     resources::{
+        self,
         cache::{
             self,
             CachedFileDetails,
@@ -316,6 +317,12 @@ async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, 
         }
 
         return Ok(Some(response));
+    }
+
+    // Check if the file is allowed to be served. The cache already checked
+    // this, but we need to check it again for files that are not cached.
+    if !resources::is_file_allowed_to_be_served(path.to_string_lossy().as_ref()) {
+        return Ok(None);
     }
 
     let Ok(file) = tokio::fs::File::open(path).await else {
