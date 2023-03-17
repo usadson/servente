@@ -190,6 +190,12 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
             return Ok(Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display())));
         }
 
+        for component in path.components() {
+            if let std::path::Component::ParentDir = component {
+                return Ok(Response::with_status_and_string_body(StatusCode::Forbidden, "Forbidden"));
+            }
+        }
+
         if let Some(served_file_response) = serve_file(request, &path).await? {
             return Ok(served_file_response);
         };
