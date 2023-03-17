@@ -2,8 +2,10 @@
 // All Rights Reserved.
 
 use std::{
-    sync::Arc,
-    time::Duration, path::{Path, PathBuf},
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use lazy_static::lazy_static;
@@ -20,6 +22,7 @@ const DEFAULT_CACHE_DURATION: Duration = Duration::from_secs(60 * 60);
 
 lazy_static! {
     pub static ref FILE_CACHE: AsyncCache<String, Arc<ContentEncodedVersions>> = AsyncCache::new(12960, 1e6 as i64, tokio::spawn).unwrap();
+    static ref FILE_CACHE_CHECK_FILE_EXISTENCE: Mutex<HashMap<Arc<PathBuf>, ()>> = Mutex::new(HashMap::new());
 }
 
 pub enum CacheDetails {
@@ -46,14 +49,28 @@ fn cache_files_on_startup(path: &Path) -> Result<(), std::io::Error> {
 /// will check for the right conditions and stores the file in the cache if
 /// necessary.
 pub async fn maybe_cache_file(path: &Path) {
-    let start = std::time::Instant::now();
-    let Ok(mut file) = tokio::fs::File::open(path).await else {
-        return;
-    };
-
     let path = path.to_owned();
 
     tokio::task::spawn(async move {
+        let path = Arc::new(path);
+        {
+            let mut cache_sync = FILE_CACHE_CHECK_FILE_EXISTENCE.lock().unwrap();
+            match cache_sync.entry(Arc::clone(&path)) {
+                std::collections::hash_map::Entry::Occupied(_) => {
+                    // File is already in the process of being cached.
+                    return;
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(());
+                }
+            };
+        }
+
+        let start = std::time::Instant::now();
+        let Ok(mut file) = tokio::fs::File::open(path.as_ref()).await else {
+            return;
+        };
+
         if let Ok(metadata) = file.metadata().await {
             if !metadata.is_file() || metadata.len() > FILE_CACHE_MAXIMUM_SIZE {
                 return;
@@ -69,6 +86,7 @@ pub async fn maybe_cache_file(path: &Path) {
             cached.modified_date = modified_date;
 
             FILE_CACHE.insert_with_ttl(path.to_string_lossy().to_string(), Arc::new(cached), 0, DEFAULT_CACHE_DURATION).await;
+            FILE_CACHE_CHECK_FILE_EXISTENCE.lock().unwrap().remove(&path);
             println!("Cached file: {} in {} seconds", path.to_string_lossy(), (start.elapsed()).as_secs_f32());
         }
     });
