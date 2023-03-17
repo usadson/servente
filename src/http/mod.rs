@@ -180,7 +180,7 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
             return handle_welcome_page(request, request_target).await;
         };
 
-        let root = current_directory.join("wwwroot/");
+        let root = current_directory.join("wwwroot");
         let Ok(url_decoded) = urlencoding::decode(&request_target[1..]) else {
             return Ok(Response::with_status_and_string_body(StatusCode::BadRequest, "Bad Request"));
         };
