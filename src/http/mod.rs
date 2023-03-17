@@ -65,7 +65,7 @@ impl From<io::Error> for Error {
 }
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
-async fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Result<Option<Response>, io::Error> {
+fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Result<Option<Response>, io::Error> {
     if let Some(etag) = request.headers.get(&HeaderName::IfNoneMatch) {
         if etag.as_str_no_convert().unwrap() == format_system_time_as_weak_etag(modified_date) {
             let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
@@ -286,45 +286,15 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
 }
 
 async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, Error> {
-    if let Some(cached) = cache::FILE_CACHE.get(path.to_string_lossy().as_ref()) {
-        if let Some(modified_date) = cached.value().modified_date {
-            if let Some(not_modified_response) = check_not_modified(request, path, modified_date).await? {
-                return Ok(Some(not_modified_response));
-            }
-        }
-
-        let mut response = Response::with_status(StatusCode::Ok);
-
-        let encoding = if let Some(accept_encoding) = request.headers.get(&HeaderName::AcceptEncoding) {
-            if let Some(accept_encoding) = accept_encoding.as_str_no_convert() {
-                cached.value().determine_best_version_from_accept_encoding(accept_encoding)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        if let Some(encoding) = encoding {
-            response.headers.set(HeaderName::ContentEncoding, encoding.into());
-        }
-
-        response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
-        response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
-        response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value()), encoding));
-        if let Some(modified_date) = cached.value().modified_date {
-            response.headers.set_last_modified(modified_date);
-        }
-
-        if let Some(CachedFileDetails::Document { link_preloads }) = &cached.value().cache_details{
-            for link_preload in link_preloads {
-                response.headers.append_possible_duplicate(HeaderName::Link, link_preload.clone().into());
-            }
-        }
-
+    if let Some(response) = serve_file_from_cache(request, path)? {
         return Ok(Some(response));
     }
 
+    serve_file_from_disk(path).await
+}
+
+/// Serves a file from the cache if it is available.
+async fn serve_file_from_disk(path: &Path) -> Result<Option<Response>, Error> {
     // Check if the file is allowed to be served. The cache already checked
     // this, but we need to check it again for files that are not cached.
     if !resources::is_file_allowed_to_be_served(path.to_string_lossy().as_ref()) {
@@ -355,6 +325,50 @@ async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, 
     response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
 
     Ok(Some(response))
+}
+
+/// Serves a file from the cache if it is available.
+fn serve_file_from_cache(request: &Request, path: &Path) -> Result<Option<Response>, Error> {
+    let Some(cached) = cache::FILE_CACHE.get(path.to_string_lossy().as_ref()) else {
+        return Ok(None)
+    };
+
+    if let Some(modified_date) = cached.value().modified_date {
+        if let Some(not_modified_response) = check_not_modified(request, path, modified_date)? {
+            return Ok(Some(not_modified_response));
+        }
+    }
+
+    let mut response = Response::with_status(StatusCode::Ok);
+
+    let encoding = if let Some(accept_encoding) = request.headers.get(&HeaderName::AcceptEncoding) {
+        if let Some(accept_encoding) = accept_encoding.as_str_no_convert() {
+            cached.value().determine_best_version_from_accept_encoding(accept_encoding)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if let Some(encoding) = encoding {
+        response.headers.set(HeaderName::ContentEncoding, encoding.into());
+    }
+
+    response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+    response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
+    response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value()), encoding));
+    if let Some(modified_date) = cached.value().modified_date {
+        response.headers.set_last_modified(modified_date);
+    }
+
+    if let Some(CachedFileDetails::Document { link_preloads }) = &cached.value().cache_details{
+        for link_preload in link_preloads {
+            response.headers.append_possible_duplicate(HeaderName::Link, link_preload.clone().into());
+        }
+    }
+
+    return Ok(Some(response));
 }
 
 /// Serve the welcome page response with a 304 Not Modified status code.
