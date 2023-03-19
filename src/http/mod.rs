@@ -43,6 +43,9 @@ pub mod hints;
 pub mod message;
 pub mod v1;
 
+#[cfg(feature = "http2")]
+pub mod v2;
+
 #[cfg(feature = "http3")]
 pub mod v3;
 
