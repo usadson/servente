@@ -73,6 +73,19 @@ pub enum TransferStrategy {
     Ranges { ranges: HttpRangeList },
 }
 
+#[derive(Debug)]
+pub enum ExchangeError {
+    MalformedData,
+    Http2Upgrade,
+    Io(io::Error),
+}
+
+impl From<io::Error> for ExchangeError {
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
 
 #[cfg(feature = "ktls")]
 enum StreamWrapper {
@@ -254,7 +267,7 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
 
 /// Reads a single response, handles it and sends the response back to the
 /// client.
-async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteConfig) -> Result<(), io::Error> {
+async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteConfig) -> Result<(), ExchangeError> {
     #[cfg(feature = "debugging")]
     let start_full = Instant::now();
 
@@ -266,14 +279,22 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
                     let mut response = handle_parse_error(error).await;
                     finish_response_error(&mut response).await?;
                     send_response(connection.buf_writer, response, None).await?;
-                    return Err(io::Error::new(io::ErrorKind::InvalidData, "Parse error"));
+                    return Err(ExchangeError::MalformedData);
                 }
                 Error::Other(error) => {
-                    return Err(error);
+                    return Err(error.into());
                 }
             }
         }
     };
+
+    // This should be done before reading the request body, since the PRI
+    // method is special in that it doesn't convey a way for a normal HTTP/1.1
+    // server to know that it contains a body using `Content-Length` or a
+    // related mechanism, but it actually does.
+    if request.method == Method::Pri {
+        return handle_pri_method(connection, request).await;
+    }
 
     // TODO some handlers might prefer to read the body themselves.
     if let Err(error) = read_request_body(connection.buf_reader, &mut request).await {
@@ -282,10 +303,10 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
                 let mut response = handle_parse_error(error).await;
                 finish_response_error(&mut response).await?;
                 send_response(connection.buf_writer, response, None).await?;
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "Parse error"));
+                return Err(ExchangeError::MalformedData);
             }
             Error::Other(error) => {
-                return Err(error);
+                return Err(error.into());
             }
         }
     }
@@ -341,6 +362,86 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
     Ok(())
 }
 
+/// The 'PRI' method is used for upgrading HTTP/1.1 connections to HTTP/2. It
+/// achieves this by using a special preface:
+/// ```text
+/// PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n
+/// ```
+async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request) -> Result<(), ExchangeError> {
+    let mut buf: [u8; 6] = [0; 6];
+    connection.buf_reader.read_exact(&mut buf).await?;
+
+    if &buf[..] != b"SM\r\n\r\n" {
+        #[cfg(feature = "debugging")]
+        println!("[HTTP/2] [PRI Upgrade] Invalid body: {:?}", buf);
+
+        let mut response = Response::with_status_and_string_body(StatusCode::BadRequest,
+            "Invalid HTTP/2 PRI upgrade body");
+        response.headers.set(HeaderName::Connection, "close".into());
+        let status = finish_response_error(&mut response).await;
+        debug_assert!(status.is_ok());
+        send_response(connection.buf_writer, response, None).await?;
+        return Err(ExchangeError::MalformedData);
+    }
+
+    if request.version != HttpVersion::Http2 {
+        let mut response = Response::with_status_and_string_body(StatusCode::HTTPVersionNotSupported,
+                "Invalid HTTP upgrade using PRI: expected version HTTP/2.0");
+        response.headers.set(HeaderName::Connection, "close".into());
+        let status = finish_response_error(&mut response).await;
+        debug_assert!(status.is_ok());
+        send_response(connection.buf_writer, response, None).await?;
+        return Err(ExchangeError::MalformedData);
+    }
+
+    // PRI method should be exactly like the preface, so no headers
+    if request.headers.iter().next().is_some() {
+        let mut response = Response::with_status_and_string_body(StatusCode::BadRequest,
+            "Invalid preface start request");
+        response.headers.set(HeaderName::Connection, "close".into());
+        let status = finish_response_error(&mut response).await;
+        debug_assert!(status.is_ok());
+        send_response(connection.buf_writer, response, None).await?;
+        return Err(ExchangeError::MalformedData);
+    }
+
+    // Notify the caller that the HTTP connection should be upgraded to version
+    // HTTP/2.
+    #[cfg(feature = "http2")]
+    return Err(ExchangeError::Http2Upgrade);
+
+    #[cfg(not(feature = "http2"))]
+    return handle_pri_method_http2_not_enabled(connection).await;
+}
+
+#[cfg(not(feature = "http2"))]
+async fn handle_pri_method_http2_not_enabled<'a>(connection: &mut Connection<'a>) -> Result<(), ExchangeError> {
+    const FRAME_HTTP_1_1_REQUIRED: &'static [u8; 35] = &[
+        // Settings Acknowledge
+        0x00, 0x00, 0x00,       // length = 0
+        0x04,                   // type = 0x04 SETTINGS
+        0b00_00_00_01,          // flags = ACK
+        0x00, 0x00, 0x00, 0x00, // reserved = 0, stream = 0
+
+        // Settings from server (0)
+        0x00, 0x00, 0x00,       // length = 0
+        0x04,                   // type = 0x04 SETTINGS
+        0b00_00_00_00,          // flags = 0
+        0x00, 0x00, 0x00, 0x00, // reserved = 0, stream = 0
+
+        // Goaway
+        0x00, 0x00, 0x04,       // length = 4 (stream + error code)
+        0x07,                   // type = 0x07 GOAWAY
+        0x00,                   // flags = 0
+        0x00, 0x00, 0x00, 0x00, // reserved = 0, stream = 0
+        0x00, 0x00, 0x00, 0x00, // reserved = 0, last stream = 0
+        0x0d, 0x00, 0x00, 0x00, // error code = 0x0d HTTP_1_1_REQUIRED
+    ];
+
+    connection.buf_writer.write_all(FRAME_HTTP_1_1_REQUIRED).await?;
+    Err(ExchangeError::MalformedData)
+}
+
 /// Process a single socket connection.
 async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
     //println!("Client connected: {}", stream.peer_addr().unwrap());
@@ -393,6 +494,12 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
 
     loop {
         if let Err(e) = handle_exchange(&mut connection, &config).await {
+            #[cfg(feature = "http2")]
+            if let ExchangeError::Http2Upgrade = e {
+                super::v2::handle_client(reader, writer).await;
+                return;
+            }
+
             #[cfg(feature = "debugging")]
             println!("Client Error: {:?}", e);
 

@@ -44,7 +44,9 @@ async fn main() -> io::Result<()> {
         .expect("Failed to build rustls configuration!");
 
     // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
-    tls_config.alpn_protocols = vec![b"http/1.1".to_vec(), b"h2".to_vec(), b"h3".to_vec()];
+    // The "h3" ALPN identifier is only applicable to the QUIC transport
+    // protocol, this is just for TCP.
+    tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     tls_config.send_half_rtt_data = true;
 
     #[cfg(feature = "ktls")]

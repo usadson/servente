@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "*"
 brotli = { version = "*", default-features = false, features = ["std"] }
 flate2 = "*"
+hashbrown = "*"
 httpdate = "*"
 lazy_static = "*"
 rcgen = "*"
@@ -32,11 +33,12 @@ quinn = { version = "*", features = ["rustls"], optional = true }
 ktls = { version = "*", optional = true }
 
 [features]
-default = ["analysis", "watch"]
+default = ["analysis", "watch", "http2"]
 
 analysis = ["dep:scraper"]
 debugging = []
 ktls = ["dep:ktls"]
+http2 = []
 http3 = ["dep:quinn"]
 
 # Watch for changes in the filesystem
