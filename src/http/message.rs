@@ -617,6 +617,29 @@ impl HeaderValue {
             _ => None,
         }
     }
+
+    /// Calculate the length of the header value in string characters.
+    pub fn string_length(&self) -> usize {
+        // Fast path, when the type is a string, or can easily be mapped into
+        // one:
+        match self {
+            Self::StaticString(str) => return str.len(),
+            Self::String(str) => return str.len(),
+            Self::ContentCoding(coding) => return coding.http_identifier().len(),
+            Self::ContentRange(_) => (),
+            Self::DateTime(_) => (),
+            Self::MediaType(media_type) => return media_type.as_str().len(),
+            Self::SecFetchDest(sec_fetch_dest) => return sec_fetch_dest.as_str().len(),
+            Self::Size(_) => (),
+        }
+
+        // Otherwise slow path, format it into a new string and get the length
+        // of the string after formatting.
+
+        let mut tmp_str = String::new();
+        self.append_to_message(&mut tmp_str);
+        tmp_str.len()
+    }
 }
 
 impl From<ContentCoding> for HeaderValue {
@@ -1077,4 +1100,25 @@ pub enum ContentRangeHeaderValue {
         /// The complete length of the resource.
         complete_length: usize
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_header_value_string_length() {
+        assert_eq!(HeaderValue::StaticString("hello").string_length(), 5);
+        assert_eq!(HeaderValue::String(String::new()).string_length(), 0);
+        assert_eq!(HeaderValue::String(String::from("This is a line.")).string_length(), 15);
+        assert_eq!(HeaderValue::ContentCoding(ContentCoding::Brotli).string_length(), 2);
+        assert_eq!(HeaderValue::ContentCoding(ContentCoding::Gzip).string_length(), 4);
+        assert_eq!(HeaderValue::ContentRange(ContentRangeHeaderValue::Range { start: 99, end: 4783, complete_length: None }).string_length(), "bytes 99-4783/*".len());
+        assert_eq!(HeaderValue::ContentRange(ContentRangeHeaderValue::Range { start: 0, end: 4, complete_length: Some(5) }).string_length(), "bytes 0-4/5".len());
+        assert_eq!(HeaderValue::ContentRange(ContentRangeHeaderValue::Range { start: 0, end: 4, complete_length: Some(60) }).string_length(), "bytes 0-4/60".len());
+        assert_eq!(HeaderValue::ContentRange(ContentRangeHeaderValue::Unsatisfied { complete_length: 10 }).string_length(), "bytes */10".len());
+        assert_eq!(HeaderValue::MediaType(MediaType::HTML).string_length(), MediaType::HTML.as_str().len());
+        assert_eq!(HeaderValue::SecFetchDest(SecFetchDest::Document).string_length(), "document".len());
+        assert_eq!(HeaderValue::Size(100).string_length(), 3);
+    }
 }
