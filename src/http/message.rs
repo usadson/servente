@@ -844,6 +844,66 @@ pub enum Method {
     VersionControl,
 }
 
+impl Method {
+    /// Get the method in string form.
+    ///
+    /// # Notes
+    /// Header names are case-sensitive, as per
+    /// [RFC 9110 - Section 9.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.1-5):
+    /// > The method token is case-sensitive because it might be used as a
+    /// > gateway to object-based systems with case-sensitive method names. By
+    /// > convention, standardized methods are defined in all-uppercase US-ASCII
+    /// > letters.
+    ///
+    /// # References
+    /// * [RFC 9110 - Section 9. Methods](https://www.rfc-editor.org/rfc/rfc9110.html#section-9)
+    /// * [IANA Hypertext Transfer Protocol (HTTP) Method Registry](https://www.iana.org/assignments/http-methods/http-methods.xhtml)
+    pub fn as_string(&self) -> &str {
+        match self {
+            Self::Other(str) => str,
+            Self::Acl => "ACL",
+            Self::BaselineControl => "BASELINE-CONTROL",
+            Self::Bind => "BIND",
+            Self::CheckIn => "CHECKIN",
+            Self::CheckOut => "CHECKOUT",
+            Self::Connect => "CONNECT",
+            Self::Copy => "COPY",
+            Self::Delete => "DELETE",
+            Self::Get => "GET",
+            Self::Head => "HEAD",
+            Self::Label => "LABEL",
+            Self::Link => "LINK",
+            Self::Lock => "LOCK",
+            Self::Merge => "MERGE",
+            Self::MkActivity => "MKACTIVITY",
+            Self::MkCalendar => "MKCALENDAR",
+            Self::MkCol => "MKCOL",
+            Self::MkRedirectRef => "MKREDIRECTREF",
+            Self::MkWorkspace => "MKWORKSPACE",
+            Self::Move => "MOVE",
+            Self::Options => "OPTIONS",
+            Self::OrderPatch => "ORDERPATCH",
+            Self::Patch => "PATCH",
+            Self::Post => "POST",
+            Self::Pri => "PRI",
+            Self::PropFind => "PROPFIND",
+            Self::PropPatch => "PROPPATCH",
+            Self::Put => "PUT",
+            Self::Rebind => "REBIND",
+            Self::Report => "REPORT",
+            Self::Search => "SEARCH",
+            Self::Trace => "TRACE",
+            Self::Unbind => "UNBIND",
+            Self::Uncheckout => "UNCHECKOUT",
+            Self::Unlink => "UNLINK",
+            Self::Unlock => "UNLOCK",
+            Self::Update => "UPDATE",
+            Self::UpdateRedirectRef => "UPDATEREDIRECTREF",
+            Self::VersionControl => "VERSION-CONTROL",
+        }
+    }
+}
+
 static METHOD_MAP: phf::Map<UniCase<&'static str>, Method> = phf_map!(
     UniCase::ascii("acl") => Method::Acl,
     UniCase::ascii("baseline-control") => Method::BaselineControl,
