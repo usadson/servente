@@ -25,6 +25,7 @@ pub struct HandlerController {
 }
 
 unsafe impl Send for HandlerController {}
+unsafe impl Sync for HandlerController {}
 
 impl HandlerController {
     pub fn new() -> Self {

@@ -523,6 +523,113 @@ impl HeaderName {
             HeaderName::XXSSProtection => "X-XSS-Protection",
         }
     }
+
+    /// Get the lowercase format of the header, for use in HTTP/2.
+    ///
+    /// # HTTP/2
+    /// _RFC 9113, section 8.2 Header Fields_ states:
+    /// > Field names MUST be converted to lowercase when constructing an
+    /// > HTTP/2 message.
+    pub fn to_string_lowercase(&self) -> Cow<'static, str> {
+        Cow::Borrowed(match self {
+            HeaderName::Other(str) => return Cow::Owned(str.to_ascii_lowercase()),
+
+            HeaderName::Accept => "accept",
+            HeaderName::AcceptCharset => "accept-charset",
+            HeaderName::AcceptEncoding => "accept-encoding",
+            HeaderName::AcceptLanguage => "accept-language",
+            HeaderName::AcceptRanges => "accept-ranges",
+            HeaderName::AccessControlAllowCredentials => "access-control-allow-credentials",
+            HeaderName::AccessControlAllowHeaders => "access-control-allow-headers",
+            HeaderName::AccessControlAllowMethods => "access-control-allow-methods",
+            HeaderName::AccessControlAllowOrigin => "access-control-allow-origin",
+            HeaderName::AccessControlExposeHeaders => "access-control-expose-headers",
+            HeaderName::AccessControlMaxAge => "access-control-max-age",
+            HeaderName::AccessControlRequestHeaders => "access-control-request-headers",
+            HeaderName::AccessControlRequestMethod => "access-control-request-method",
+            HeaderName::Age => "age",
+            HeaderName::Allow => "allow",
+            HeaderName::AltSvc => "alt-svc",
+            HeaderName::Authorization => "authorization",
+            HeaderName::CacheControl => "cache-control",
+            HeaderName::CacheStatus => "cache-status",
+            HeaderName::Close => "close",
+            HeaderName::Connection => "connection",
+            HeaderName::Cookie => "cookie",
+            HeaderName::ContentDisposition => "content-disposition",
+            HeaderName::ContentEncoding => "content-encoding",
+            HeaderName::ContentLanguage => "content-language",
+            HeaderName::ContentLength => "content-length",
+            HeaderName::ContentLocation => "content-location",
+            HeaderName::ContentRange => "content-range",
+            HeaderName::ContentSecurityPolicy => "content-security-policy",
+            HeaderName::ContentSecurityPolicyReportOnly => "content-security-policy-report-only",
+            HeaderName::ContentType => "content-type",
+            HeaderName::CrossOriginResourcePolicy => "cross-origin-resource-policy",
+            HeaderName::Date => "date",
+            HeaderName::DNT => "dnt",
+            HeaderName::EarlyData => "early-data",
+            HeaderName::ETag => "etag",
+            HeaderName::Expect => "expect",
+            HeaderName::ExpectCT => "ExpectCT",
+            HeaderName::Expires => "expires",
+            HeaderName::Forwarded => "forwarded",
+            HeaderName::From => "from",
+            HeaderName::Host => "host",
+            HeaderName::IfMatch => "if-match",
+            HeaderName::IfModifiedSince => "if-modified-since",
+            HeaderName::IfNoneMatch => "if-none-match",
+            HeaderName::IfRange => "if-range",
+            HeaderName::IfUnmodifiedSince => "if-unmodified-since",
+            HeaderName::LastModified => "last-modified",
+            HeaderName::Link => "link",
+            HeaderName::Location => "location",
+            HeaderName::MaxForwards => "max-forwards",
+            HeaderName::Origin => "origin",
+            HeaderName::Pragma => "pragma",
+            HeaderName::ProxyAuthenticate => "proxy-authenticate",
+            HeaderName::ProxyAuthorization => "proxy-authorization",
+            HeaderName::ProxyStatus => "proxy-status",
+            HeaderName::Purpose => "purpose",
+            HeaderName::Range => "range",
+            HeaderName::Referer => "referer",
+            HeaderName::ReferrerPolicy => "referrer-policy",
+            HeaderName::Refresh => "refresh",
+            HeaderName::RetryAfter => "retry-after",
+            HeaderName::SecChUa => "sec-ch-ua",
+            HeaderName::SecChUaMobile => "sec-ch-ua-mobile",
+            HeaderName::SecChUaPlatform => "sec-ch-ua-platform",
+            HeaderName::SecFetchDest => "sec-fetch-dest",
+            HeaderName::SecFetchMode => "sec-fetch-mode",
+            HeaderName::SecFetchSite => "sec-fetch-site",
+            HeaderName::SecFetchUser => "sec-fetch-user",
+            HeaderName::SecPurpose => "sec-purpose",
+            HeaderName::SecWebSocketAccept => "sec-websocket-accept",
+            HeaderName::SecWebSocketExtensions => "sec-websocket-extensions",
+            HeaderName::SecWebSocketKey => "sec-websocket-key",
+            HeaderName::SecWebSocketProtocol => "sec-websocket-protocol",
+            HeaderName::SecWebSocketVersion => "sec-websocket-version",
+            HeaderName::Server => "server",
+            HeaderName::ServerTiming => "server-timing",
+            HeaderName::SetCookie => "set-cookie",
+            HeaderName::StrictTransportSecurity => "strict-transport-security",
+            HeaderName::TE => "te",
+            HeaderName::TimingAllowOrigin => "timing-allow-origin",
+            HeaderName::Trailer => "trailer",
+            HeaderName::TransferEncoding => "transfer-encoding",
+            HeaderName::Upgrade => "upgrade",
+            HeaderName::UpgradeInsecureRequests => "upgrade-insecure-requests",
+            HeaderName::UserAgent => "user-agent",
+            HeaderName::Vary => "vary",
+            HeaderName::Via => "via",
+            HeaderName::WwwAuthenticate => "www-authenticate",
+            HeaderName::XContentTypeOptions => "x-content-type-options",
+            HeaderName::XForwaredFor => "x-forwarded-for",
+            HeaderName::XFrameOptions => "x-frame-options",
+            HeaderName::XRequestedWith => "x-requested-with",
+            HeaderName::XXSSProtection => "x-xss-protection",
+        })
+    }
 }
 
 /// Represents a value of a header.
@@ -605,6 +712,13 @@ impl HeaderValue {
                 response_text.push_str(&size.to_string());
             }
         }
+    }
+
+    /// Get the header in string form.
+    pub fn to_string(&self) -> String {
+        let mut result = String::new();
+        self.append_to_message(&mut result);
+        result
     }
 
     /// Parses the value as a number.
@@ -731,6 +845,11 @@ impl HeaderMap {
         }
 
         false
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.headers.len()
     }
 
     #[must_use]
