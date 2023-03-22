@@ -185,6 +185,8 @@ pub enum DecompressionError {
     NoPath,
     NoMethod,
     UnexpectedEndOfFile,
+    DynamicTableUpdateTooLarge,
+    DynamicTableUpdateNotFirst,
 
     DuplicateMethod,
     DuplicatePath,
@@ -251,9 +253,9 @@ impl DynamicTable {
                 StaticTableEntry::Status(_) => Err(DynamicTableLookupError::PseudoHeaderStatus),
                 StaticTableEntry::Header(name) => {
                     if let Some(value) = supplied_value {
-                        Ok(DynamicTableEntry::Header { name: name, value: value.into() })
+                        Ok(DynamicTableEntry::Header { name, value: value.into() })
                     } else {
-                        Ok(DynamicTableEntry::Header { name: name, value: "".into() })
+                        Ok(DynamicTableEntry::Header { name, value: "".into() })
                     }
                 }
                 StaticTableEntry::HeaderWithValue { name, value } => {
@@ -292,6 +294,17 @@ impl DynamicTable {
         }
 
         self.table.push_front((entry, entry_size));
+    }
+
+    pub fn size_update(&mut self, size: usize) {
+        while self.current_size > size {
+            let Some((_, last_entry_size)) = self.table.pop_back() else {
+                // Table is empty, so it will never fit in the table.
+                return;
+            };
+
+            self.current_size -= last_entry_size;
+        }
     }
 }
 
@@ -377,7 +390,8 @@ impl HuffmanEntry {
     }
 }
 
-const HUFFMAN_CODE: &'static [HuffmanEntry] = &[
+/// The Huffman code, as defined by HPACK.
+const HUFFMAN_CODE: &[HuffmanEntry] = &[
     HuffmanEntry::new(0x1ff8, 13),
     HuffmanEntry::new(0x7fffd8, 23),
     HuffmanEntry::new(0xfffffe2, 28),
@@ -732,7 +746,7 @@ enum StaticTableEntry {
 
 /// # References
 /// * [RFC 7541 - Appendix A. Static Table Definition](https://httpwg.org/specs/rfc7541.html#static.table.definition)
-const STATIC_TABLE: &'static [StaticTableEntry; 62] = &[
+const STATIC_TABLE: &[StaticTableEntry; 62] = &[
     StaticTableEntry::Illegal,
     StaticTableEntry::Authority,
     StaticTableEntry::Method(Method::Get),
@@ -803,7 +817,13 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
     let mut method = None;
     let mut headers = Vec::new();
 
+    let mut is_first = true;
     while let Some(first_octet) = request.read_u8() {
+        let is_first = {
+            let was = is_first;
+            is_first = false;
+            was
+        };
         // 6.1. Indexed Header Field Representation
         if first_octet & 0x80 == 0x80 {
             let Some(index) = request.read_integer(first_octet & 0x7F, 7) else {
@@ -884,8 +904,15 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
                 return Err(DecompressionError::UnexpectedEndOfFile);
             };
 
-            // TODO
-            println!("[HPACK] Dynamic Table Size Update {max_size}");
+            if !is_first {
+                return Err(DecompressionError::DynamicTableUpdateNotFirst);
+            }
+
+            if dynamic_table.max_size < max_size {
+                return Err(DecompressionError::DynamicTableUpdateTooLarge);
+            }
+
+            dynamic_table.size_update(max_size);
             continue;
         }
 
