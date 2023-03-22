@@ -1160,6 +1160,9 @@ async fn handle_frame_rst_stream(connection: &mut Connection, stream_id: StreamI
 
 fn handle_frame_window_update(connection: &mut Connection, stream_id: StreamId, window_size_increment: u32) -> Result<(), ConnectionError> {
     if window_size_increment == 0 {
+        if stream_id == StreamId::CONTROL {
+            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+        }
         return Err(ConnectionError::StreamError { error_code: ErrorCode::ProtocolError, stream_id });
     }
 
