@@ -229,7 +229,12 @@ impl Connection {
     /// ### References
     /// * [RFC 9113 - Section 3.4. HTTP/2 Connection Preface](https://www.rfc-editor.org/rfc/rfc9113.html#name-http-2-connection-preface)
     pub async fn complete_preface(&mut self) -> Result<(), ConnectionError> {
-        self.send_frame_with_flush(Frame::Settings { settings: Vec::new() }).await?;
+        self.send_frame_with_flush(Frame::Settings {
+            settings: vec![
+                (SettingKind::SettingsNoRfc7540Priorities, SettingValue(1)),
+                (SettingKind::EnablePush, SettingValue(0)),
+            ],
+        }).await?;
 
         let frame = self.read_frame().await?;
         let Frame::Settings { settings } = frame else {
@@ -423,6 +428,9 @@ impl Connection {
                             (SettingKind::MaxFrameSize, SettingValue(value))
                         }
                         SETTINGS_MAX_HEADER_LIST_SIZE => (SettingKind::MaxHeaderListSize, SettingValue(value)),
+                        SETTINGS_ENABLE_CONNECT_PROTOCOL => (SettingKind::SettingsEnableConnectProtocol, SettingValue(value)),
+                        SETTINGS_NO_RFC7540_PRIORITIES => (SettingKind::SettingsNoRfc7540Priorities, SettingValue(value)),
+                        SETTINGS_TLS_RENEG_PERMITTED => (SettingKind::TlsRenegotiationPermitted, SettingValue(value)),
                         _ => {
                             #[cfg(feature = "debugging")]
                             println!("[HTTP/2] [Settings] Received unknown setting of type {} with value {}", kind, value);
