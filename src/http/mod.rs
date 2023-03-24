@@ -150,17 +150,16 @@ pub async fn finish_response_normal(request: &Request, response: &mut Response) 
 }
 
 /// Handles a `HttpParseError`.
+///
+/// Servers SHOULD explain the error to the client, but this might be a security
+/// risk, so we might want to make this optional.
 pub async fn handle_parse_error(error: HttpParseError) -> Response {
-    match error {
-        HttpParseError::HeaderDoesNotContainColon => Response::bad_request("Invalid header format"),
-        HttpParseError::HeaderTooLarge => Response::with_status_and_string_body(StatusCode::RequestHeaderFieldsTooLarge, "Request Header Fields Too Large"),
-        HttpParseError::InvalidContentLength => Response::bad_request("Malformed Content-Length"),
-        HttpParseError::InvalidCRLF => Response::bad_request("Invalid CRLF"),
-        HttpParseError::InvalidHttpVersion => Response::with_status_and_string_body(StatusCode::HTTPVersionNotSupported, "Invalid HTTP version"),
-        HttpParseError::InvalidRequestTarget => Response::bad_request("Invalid request target"),
-        HttpParseError::MethodTooLarge => Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed"),
-        HttpParseError::RequestTargetTooLarge => Response::with_status_and_string_body(StatusCode::URITooLong, "Invalid request target"),
-    }
+    let body = format!("<h1>Bad Request<h1>
+<hr>
+<p>{}</p>", error.as_ref());
+    let mut response = Response::with_status_and_string_body(StatusCode::BadRequest, body);
+    response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::HTML));
+    response
 }
 
 /// Handles a request.
@@ -385,4 +384,42 @@ fn serve_welcome_page_not_modified(request: &Request) -> Response {
     }
 
     response
+}
+
+fn validate_token(value: &str) -> Result<(), HttpParseError> {
+    if value.is_empty() {
+        return Err(HttpParseError::TokenEmpty);
+    }
+
+    for character in value.bytes() {
+        validate_token_character(character)?;
+    }
+
+    Ok(())
+}
+
+/// Validate a token character.
+///
+/// ```text
+/// tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+///                / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+///                / DIGIT / ALPHA
+///                ; any VCHAR, except delimiters
+/// ```
+fn validate_token_character(character: u8) -> Result<(), HttpParseError> {
+    match character {
+        b' ' | b'\t' => Err(HttpParseError::TokenContainsWhitespace),
+
+        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' |
+        b'^' | b'_' | b'`' | b'|' | b'~' => Ok(()),
+
+        b'0'..=b'9' => Ok(()),
+        b'A'..=b'Z' => Ok(()),
+        b'a'..=b'z' => Ok(()),
+
+        b'"' | b'(' | b')' | b',' | b'/' | b':' | b';' | b'<' | b'=' | b'>' |
+        b'?' | b'@' | b'[' | b'\\' | b']' | b'{' | b'}' => Err(HttpParseError::TokenContainsDelimiter),
+
+        _ => Err(HttpParseError::TokenContainsNonVisibleAscii),
+    }
 }

@@ -1,8 +1,10 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+use strum_macros::AsRefStr;
+
 /// An error that can occur while parsing an HTTP request.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, AsRefStr)]
 pub enum HttpParseError {
     /// The header didn't contain a colon, it's only the name.
     ///
@@ -99,4 +101,9 @@ pub enum HttpParseError {
     /// GET /this-is-a-very-long-request-target-containing-many-characters[...] HTTP/1.1
     /// ```
     RequestTargetTooLarge,
+
+    TokenContainsDelimiter,
+    TokenContainsNonVisibleAscii,
+    TokenContainsWhitespace,
+    TokenEmpty,
 }

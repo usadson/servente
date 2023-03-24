@@ -16,6 +16,8 @@ rstest = "*"
 rustls = { version = "*", features = ["quic", "secret_extraction"] }
 rustls-pemfile = "*"
 stretto = { version = "*", features = ["async"] }
+strum = "*"
+strum_macros = "*"
 tokio = { version = "*", features = ["full"] }
 tokio-rustls = "*"
 phf = { version = "*", features = ["macros", "unicase"] }

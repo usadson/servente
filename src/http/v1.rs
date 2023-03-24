@@ -443,6 +443,8 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         let name = name.trim().to_string();
         let value = value.trim().to_string();
 
+        super::validate_token(&name)?;
+
         let name = HeaderName::from(name);
         if let HeaderName::Other(name) = &name {
             #[cfg(debug_assertions)]
@@ -867,5 +869,17 @@ mod tests {
             Error::ParseError(HttpParseError::MethodTooLarge) => {},
             _ => panic!("Unexpected error: {:?}", error),
         }
+    }
+
+    #[rstest]
+    #[case("Connection: \rkeep-alive", HttpParseError::InvalidCRLF)]
+    #[case("Connection keep-alive", HttpParseError::HeaderDoesNotContainColon)]
+    #[case("Connection keep-alive", HttpParseError::HeaderDoesNotContainColon)]
+    #[tokio::test]
+    async fn read_headers_name_validation(#[case] line: &str, #[case] expected: HttpParseError) {
+        let mut stream = std::io::Cursor::new(format!("{}\r\n\r\n", line));
+        let headers = super::read_headers(&mut stream).await;
+        assert!(headers.is_err());
+        assert!(matches!(headers.err().unwrap(), Error::ParseError(e) if e == expected));
     }
 }
