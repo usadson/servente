@@ -464,7 +464,7 @@ impl HeaderName {
             HeaderName::EarlyData => "Early-Data",
             HeaderName::ETag => "ETag",
             HeaderName::Expect => "Expect",
-            HeaderName::ExpectCT => "ExpectCT",
+            HeaderName::ExpectCT => "Expect-CT",
             HeaderName::Expires => "Expires",
             HeaderName::Forwarded => "Forwarded",
             HeaderName::From => "From",
@@ -571,7 +571,7 @@ impl HeaderName {
             HeaderName::EarlyData => "early-data",
             HeaderName::ETag => "etag",
             HeaderName::Expect => "expect",
-            HeaderName::ExpectCT => "ExpectCT",
+            HeaderName::ExpectCT => "expect-ct",
             HeaderName::Expires => "expires",
             HeaderName::Forwarded => "forwarded",
             HeaderName::From => "from",
@@ -1284,6 +1284,27 @@ pub enum ContentRangeHeaderValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Checks whether or not all the names in the `STRING_TO_HEADER_NAME_MAP`
+    /// are valid, whether the `to_string_h1()` and `to_string_lowercase()`
+    /// methods return the same string case-insensitve,
+    /// and whether the `to_string_lowercase()` method returns a string
+    /// that is all lowercase.
+    #[test]
+    fn test_header_name_to_string() {
+        for (str, name) in STRING_TO_HEADER_NAME_MAP.entries() {
+            assert_eq!(str, &UniCase::ascii(name.to_string_h1()));
+            assert_eq!(str, &UniCase::ascii(name.to_string_lowercase()));
+
+            assert!(name.to_string_h1().is_ascii());
+            assert!(name.to_string_lowercase().is_ascii());
+
+            assert!(!name.to_string_lowercase().bytes().any(|b| (b as char).is_uppercase()));
+
+            assert!(!name.to_string_h1().split('-').any(|str| !str.is_empty() && str.chars().nth(0).unwrap().is_ascii_lowercase()),
+                "HTTP/1.1 Header names should have uppercase letters");
+        }
+    }
 
     #[test]
     fn test_header_value_string_length() {
