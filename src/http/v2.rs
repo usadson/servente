@@ -777,6 +777,7 @@ impl Frame {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum RequestError {
     CompressionError(hpack::DecompressionError),
+    DataSumDoesNotEqualContentLength,
 }
 
 async fn send_frame<T>(writer: &mut T, frame: Frame) -> Result<(), ConnectionError>
@@ -1097,6 +1098,9 @@ async fn handle_client_inner_join(connection: &mut Connection, result: (StreamId
             connection.send_response(stream_id, response).await
         }
         Err(e) => match e {
+            RequestError::DataSumDoesNotEqualContentLength => {
+                Err(ConnectionError::StreamError { error_code: ErrorCode::ProtocolError, stream_id })
+            }
             RequestError::CompressionError(error) => {
                 Err(ConnectionError::ConnectionError { error_code: ErrorCode::CompressionError, additional_debug_data: format!("Stream {} failed to decompress: {:#?}", stream_id.0, error) })
             }
@@ -1195,8 +1199,17 @@ async fn handle_request(binary_request: BinaryRequest, sender: tokio::sync::mpsc
     _ = sender.send((stream_id, result)).await;
 }
 
-async fn handle_request_inner(binary_request: BinaryRequest, dynamic_table: Arc<Mutex<DynamicTable>>, config: Arc<ServenteConfig>) -> Result<Response, RequestError> {
+async fn handle_request_inner(mut binary_request: BinaryRequest, dynamic_table: Arc<Mutex<DynamicTable>>, config: Arc<ServenteConfig>) -> Result<Response, RequestError> {
+    let data = std::mem::take(&mut binary_request.data);
     let request = binary_request.decode(dynamic_table).await?;
+    if let Some(content_length) = request.headers.get(&HeaderName::ContentLength) {
+        if let Some(content_length) = content_length.parse_number() {
+            let full_data_sum = data.iter().map(|payload| payload.len()).sum();
+            if content_length != full_data_sum {
+                return Err(RequestError::DataSumDoesNotEqualContentLength);
+            }
+        }
+    }
     let mut response = super::handle_request(&request, config.as_ref()).await;
     super::finish_response_normal(&request, &mut response).await;
     Ok(response)
