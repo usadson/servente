@@ -246,6 +246,10 @@ impl Connection {
 
         self.settings.apply(settings);
 
+        self.streams.insert(StreamId::CONTROL, Stream {
+            state: StreamState::Open { request: None },
+        });
+
         self.send_frame_with_flush(Frame::SettingsAcknowledgement).await?;
         Ok(())
     }
@@ -260,7 +264,7 @@ impl Connection {
         println!("[HTTP/2] [Frame] Received type {:x}, size {}, flags {:x} on stream {}", frame_type, payload_length, flags, stream_id.0);
 
         if payload_length > self.settings.maximum_payload_size.0 {
-            return Err(ConnectionError::ConnectionError{ error_code: ErrorCode::FrameSizeError, additional_debug_data: String::new() });
+            return Err(ConnectionError::ConnectionError{ error_code: ErrorCode::FrameSizeError, additional_debug_data: String::from("Frame larger than maximum payload size") });
         }
 
         let mut payload = Vec::new();
@@ -300,7 +304,7 @@ impl Connection {
 
                 let padding_length = is_padded.then_some(payload[0] as u32).unwrap_or(0);
                 if padding_length >= payload_length {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("Padding is greater than the full payload length") });
                 }
 
                 let data_end = (payload_length - padding_length) as usize;
@@ -321,7 +325,7 @@ impl Connection {
                 }
 
                 if stream_id.0 % 2 != 1 {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("HEADERS on a non-client stream (stream ID is even)") });
                 }
 
                 if payload_length == 0 {
@@ -345,7 +349,7 @@ impl Connection {
 
                 let padding_length = is_padded.then_some(payload[0] as u32).unwrap_or(0);
                 if padding_length >= payload_length {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("HEADERS padding is greater than payload length") });
                 }
 
                 let data_end = (payload_length - padding_length) as usize;
@@ -373,7 +377,7 @@ impl Connection {
 
             FRAME_TYPE_RST_STREAM => {
                 if payload_length != 4 {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::new() });
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::from("RST_STREAM with payload length != 4") });
                 }
                 Ok(Frame::ResetStream { stream_id, error_code: ErrorCode::from(u32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]])) })
             }
@@ -445,16 +449,16 @@ impl Connection {
             // Push promises can't be sent from the client.
             FRAME_TYPE_PUSH_PROMISE => Err(ConnectionError::ConnectionError {
                 error_code: ErrorCode::RefusedStream,
-                additional_debug_data: String::new()
+                additional_debug_data: String::from("PUSH_PROMISE from client")
             }),
 
             // [RFC 9113 - Section 6.7](https://httpwg.org/specs/rfc9113.html#PING)
             FRAME_TYPE_PING => {
                 if stream_id != StreamId::CONTROL {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("PING on non-control stream") });
                 }
                 if payload_length != 8 {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::new() });
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::from("PING payload length != 8") });
                 }
                 Ok(Frame::Ping {
                     ack: flags & 0x1 == 0x1,
@@ -479,7 +483,7 @@ impl Connection {
             // https://www.rfc-editor.org/rfc/rfc9113.html#name-window_update
             FRAME_TYPE_WINDOW_UPDATE => {
                 if payload_length != 4 {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::new() })
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::from("WINDOW_UPDATE length != 4") })
                 }
 
                 Ok(Frame::WindowUpdate {
@@ -563,6 +567,7 @@ impl Connection {
 
         self.writer.flush().await?;
 
+        #[cfg(feature = "debugging")]
         println!("Marking stream {} as closed", stream_id.0);
         self.streams.insert(stream_id, Stream {
             state: StreamState::Closed,
@@ -574,6 +579,7 @@ impl Connection {
 
 #[derive(Debug)]
 enum ConnectionError {
+    /// The connection is closed.
     Closed,
     Io(std::io::Error),
     ConnectionError {
@@ -1011,76 +1017,7 @@ async fn handle_client_inner(connection: &mut Connection, concurrent_context: &m
                 connection.pings_queued_up += 1;
             }
 
-            frame = connection.read_frame() => {
-                let frame = frame?;
-                #[cfg(feature = "debugging")]
-                println!("[HTTP/2] Incoming frame: {:#?}", frame);
-
-                match frame {
-                    Frame::Data { end_stream, stream_id, payload, } => handle_frame_data(connection, concurrent_context, end_stream, stream_id, payload).await?,
-
-                    Frame::Headers { end_stream, payload, stream_id, .. } => {
-                        let stream_state_at_beginning = connection.streams.get(&stream_id);
-
-                        if stream_id == StreamId::CONTROL {
-                            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
-                        }
-
-                        println!("Got headers for stream {} state {:?}", stream_id.0, stream_state_at_beginning.map(|s|&s.state));
-                        if stream_state_at_beginning.is_some() && !stream_state_at_beginning.unwrap().state.client_may_send_headers() {
-                            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::StreamClosed, additional_debug_data: String::new() });
-                        }
-
-                        // 5.1.1. Stream Identifiers
-                        if stream_id.0 < connection.highest_stream_id.0 {
-                            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("New stream IDs must be greater than all the previous initiated streams") });
-                        }
-
-                        let mut binary_request = BinaryRequest { stream_id, headers: vec![payload], data: Vec::new(), cursor: 0 };
-                        while connection.continuation.is_some() {
-                            println!("Waiting for continuation...");
-                            let frame = connection.read_frame().await?;
-                            debug_assert!(frame.frame_type() == FRAME_TYPE_CONTINUATION);
-                            if let Frame::Continuation { payload, .. } = frame {
-                                println!("Got one with ");
-                                binary_request.headers.push(payload);
-                            }
-                        }
-
-                        if !end_stream {
-                            connection.streams.insert(stream_id, Stream {
-                                state: StreamState::Open {
-                                    request: Some(binary_request)
-                                }
-                            });
-                        } else {
-                            handle_request_invoke_to_background(connection, concurrent_context, stream_id, binary_request);
-                        }
-                    }
-
-                    Frame::ResetStream { error_code, stream_id } => handle_frame_rst_stream(connection, stream_id, error_code).await?,
-
-                    Frame::Ping { ack, payload } => {
-                        if !ack {
-                            connection.send_frame_with_flush(Frame::Ping {
-                                ack: true,
-                                payload
-                            }).await?;
-                        } else {
-                            connection.last_ping_acknowledged = Some(Instant::now());
-                        }
-                    }
-
-                    Frame::Settings { settings } => {
-                        connection.settings.apply(settings);
-                        connection.send_frame_with_flush(Frame::SettingsAcknowledgement).await?;
-                    }
-
-                    Frame::WindowUpdate { window_size_increment, stream_id } => handle_frame_window_update(connection, stream_id, window_size_increment)?,
-
-                    _ => (),
-                }
-            }
+            frame = connection.read_frame() => handle_frame(connection, frame?, concurrent_context).await?,
             Some(result) = concurrent_context.receiver.recv() => handle_client_inner_join(connection, result, concurrent_context).await?,
         }
     }
@@ -1108,11 +1045,89 @@ async fn handle_client_inner_join(connection: &mut Connection, result: (StreamId
     }
 }
 
+async fn handle_frame(connection: &mut Connection, frame: Frame, concurrent_context: &mut ConcurrentContext) -> Result<(), ConnectionError> {
+    #[cfg(feature = "debugging")]
+    println!("[HTTP/2] Incoming frame: {:#?}", frame);
+
+    match frame {
+        Frame::Data { end_stream, stream_id, payload, } => handle_frame_data(connection, concurrent_context, end_stream, stream_id, payload).await?,
+
+        Frame::Headers { end_stream, payload, stream_id, .. } => {
+            let stream_state_at_beginning = connection.streams.get(&stream_id);
+
+            if stream_id == StreamId::CONTROL {
+                return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("HEADERS on control stream") });
+            }
+
+            if stream_state_at_beginning.is_some() && !stream_state_at_beginning.unwrap().state.client_may_send_headers() {
+                return Err(ConnectionError::ConnectionError { error_code: ErrorCode::StreamClosed, additional_debug_data: String::from("HEADERS on invalid stream") });
+            }
+
+            // 5.1.1. Stream Identifiers
+            if stream_id.0 < connection.highest_stream_id.0 {
+                return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("New stream IDs must be greater than all the previous initiated streams") });
+            }
+
+            let mut binary_request = BinaryRequest { stream_id, headers: vec![payload], data: Vec::new(), cursor: 0 };
+            while connection.continuation.is_some() {
+                println!("Waiting for continuation...");
+                let frame = connection.read_frame().await?;
+                debug_assert!(frame.frame_type() == FRAME_TYPE_CONTINUATION);
+                if let Frame::Continuation { payload, .. } = frame {
+                    println!("Got one with ");
+                    binary_request.headers.push(payload);
+                }
+            }
+
+            if !end_stream {
+                connection.streams.insert(stream_id, Stream {
+                    state: StreamState::Open {
+                        request: Some(binary_request)
+                    }
+                });
+            } else {
+                handle_request_invoke_to_background(connection, concurrent_context, stream_id, binary_request);
+            }
+        }
+
+        Frame::GoAway { last_stream_id, error_code, additional_debug_data } => {
+            if error_code != ErrorCode::NoError {
+                println!("[HTTP/2] Fatal connection error: {error_code:?} {additional_debug_data}");
+            }
+            _ = last_stream_id;
+            return Err(ConnectionError::Closed);
+        }
+
+        Frame::ResetStream { error_code, stream_id } => handle_frame_rst_stream(connection, stream_id, error_code).await?,
+
+        Frame::Ping { ack, payload } => {
+            if !ack {
+                connection.send_frame_with_flush(Frame::Ping {
+                    ack: true,
+                    payload
+                }).await?;
+            } else {
+                connection.last_ping_acknowledged = Some(Instant::now());
+            }
+        }
+
+        Frame::Settings { settings } => {
+            connection.settings.apply(settings);
+            connection.send_frame_with_flush(Frame::SettingsAcknowledgement).await?;
+        }
+
+        Frame::WindowUpdate { window_size_increment, stream_id } => handle_frame_window_update(connection, stream_id, window_size_increment)?,
+
+        _ => (),
+    }
+    Ok(())
+}
+
 async fn handle_frame_data(connection: &mut Connection,
         concurrent_context: &mut ConcurrentContext, end_stream: bool,
         stream_id: StreamId, payload: Vec<u8>) -> Result<(), ConnectionError> {
     if stream_id == StreamId::CONTROL {
-        return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+        return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("DATA on control stream") });
     }
 
     if let hashbrown::hash_map::Entry::Occupied(mut e) = connection.streams.entry(stream_id) {
@@ -1136,7 +1151,7 @@ async fn handle_frame_data(connection: &mut Connection,
     }
 
     //Err(ConnectionError::StreamError { error_code: ErrorCode::StreamClosed, stream_id })
-    Err(ConnectionError::ConnectionError { error_code: ErrorCode::StreamClosed, additional_debug_data: String::new() })
+    Err(ConnectionError::ConnectionError { error_code: ErrorCode::StreamClosed, additional_debug_data: String::from("DATA on non-open stream") })
 }
 
 async fn handle_frame_rst_stream(connection: &mut Connection, stream_id: StreamId, error_code: ErrorCode) -> Result<(), ConnectionError> {
@@ -1165,18 +1180,18 @@ async fn handle_frame_rst_stream(connection: &mut Connection, stream_id: StreamI
 fn handle_frame_window_update(connection: &mut Connection, stream_id: StreamId, window_size_increment: u32) -> Result<(), ConnectionError> {
     if window_size_increment == 0 {
         if stream_id == StreamId::CONTROL {
-            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("WINDOW_UPDATE with 0 size on control stream") });
         }
         return Err(ConnectionError::StreamError { error_code: ErrorCode::ProtocolError, stream_id });
     }
 
     if let Some(stream) = connection.streams.get(&stream_id) {
         if !stream.state.client_may_send_window_update() {
-            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("Can't send WINDOW_UPDATE on this stream") });
         }
     } else {
         // stream is idle (never initiated)
-        return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::new() });
+        return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("WINDOW_UPDATE on idle stream") });
     }
 
     // TODO: handle this actually.
