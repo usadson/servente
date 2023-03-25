@@ -1,0 +1,14 @@
+language: rust
+os:
+  - freebsd
+matrix:
+  include:
+    - os: freebsd
+      rust: stable
+      env: PROFILE=dev
+    - os: freebsd
+      rust: stable
+      env: PROFILE=release
+script:
+  - cargo build --verbose --locked --profile $PROFILE
+  - cargo test --verbose --locked --profile $PROFILE
