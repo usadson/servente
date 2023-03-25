@@ -543,7 +543,23 @@ impl Connection {
         Ok(())
     }
 
-    async fn send_response(&mut self, stream_id: StreamId, response: Response) -> Result<(), ConnectionError> {
+    async fn send_response(&mut self, stream_id: StreamId, mut response: Response) -> Result<(), ConnectionError> {
+        let content_length = if let Some(body) = &response.body {
+            match body {
+                super::message::BodyKind::Bytes(data) => data.len(),
+                super::message::BodyKind::CachedBytes(versions, coding) => {
+                    versions.get_version(*coding).len()
+                }
+                super::message::BodyKind::File{ metadata, .. } => metadata.len() as usize,
+                super::message::BodyKind::String(data) => data.len(),
+                super::message::BodyKind::StaticString(str) => str.len(),
+            }
+        } else {
+            0
+        };
+
+        response.headers.set(HeaderName::ContentLength, content_length.into());
+
         let payload = self.header_compressor.compress(&response);
         self.send_frame(Frame::Headers { end_headers: true, end_stream: response.body.is_none(), stream_id, payload }).await?;
 
@@ -555,7 +571,22 @@ impl Connection {
                 super::message::BodyKind::CachedBytes(versions, coding) => {
                     self.send_data_frame_from_slice(stream_id, versions.get_version(coding)).await?;
                 }
-                super::message::BodyKind::File{ .. } => todo!(),
+                super::message::BodyKind::File{ handle, .. } => {
+                    let mut file = handle;
+                    let buffer_length = self.settings.maximum_payload_size.0 as _;
+                    let mut buffer = Vec::with_capacity(buffer_length);
+                    buffer.resize(buffer_length, 0);
+                    loop {
+                        let bytes_read = file.read(&mut buffer).await?;
+                        if bytes_read == 0 {
+                            break;
+                        }
+                        send_frame_header(&mut self.writer, FRAME_TYPE_DATA, 0x00, stream_id, bytes_read).await?;
+                        self.writer.write_all(&buffer[0..bytes_read]).await?;
+                    }
+                    // We are allowed to send an empty DATA frame with END_STREAM set.
+                    self.send_frame(Frame::Data { end_stream: true, stream_id, payload: Vec::new() }).await?;
+                }
                 super::message::BodyKind::String(data) => {
                     self.send_data_frame_from_slice(stream_id, data.as_bytes()).await?;
                 }
@@ -786,6 +817,15 @@ enum RequestError {
     DataSumDoesNotEqualContentLength,
 }
 
+async fn send_frame_header<T>(writer: &mut T, frame_type: u8, flags: u8, stream: StreamId, payload_len: usize) -> Result<(), ConnectionError>
+        where T: AsyncWriteExt + Unpin {
+    writer.write_all(&(payload_len as u32).to_be_bytes()[1..4]).await?;
+    writer.write_u8(frame_type).await?;
+    writer.write_u8(flags).await?;
+    writer.write_u32(stream.0 & 0x7FFF_FFFF).await?;
+    Ok(())
+}
+
 async fn send_frame<T>(writer: &mut T, frame: Frame) -> Result<(), ConnectionError>
         where T: AsyncWriteExt + Unpin {
     let flags = frame.flags();
@@ -798,10 +838,7 @@ async fn send_frame<T>(writer: &mut T, frame: Frame) -> Result<(), ConnectionErr
     #[cfg(feature = "debugging")]
     println!("[HTTP/2] Sending frame: type={frame_type:#x} flags={flags:#b}/{flags:#x} stream={stream:?} payload: {} bytes", payload.len());
 
-    writer.write_all(&(payload.len() as u32).to_be_bytes()[1..4]).await?;
-    writer.write_u8(frame_type).await?;
-    writer.write_u8(flags).await?;
-    writer.write_u32(stream.0 & 0x7FFF_FFFF).await?;
+    send_frame_header(writer, frame_type, flags, stream, payload.len()).await?;
     writer.write_all(payload.as_slice()).await?;
     Ok(())
 }
