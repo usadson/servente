@@ -1031,7 +1031,7 @@ pub async fn handle_client(reader: Reader, writer: Writer, servente_config: Arc<
                     }).await.is_err() {
                         break;
                     }
-                    // TODO mark stream as "closed"
+                    connection.streams.get_mut(&stream_id).unwrap().state = StreamState::Closed;
                 }
                 ConnectionError::Closed => break,
                 ConnectionError::Io(_) => break,
@@ -1172,7 +1172,7 @@ async fn handle_frame_data(connection: &mut Connection,
         if let StreamState::Open { request } = &mut stream.state {
             if let Some(binary_request) = request {
                 if stream_id != binary_request.stream_id {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("TODO: expected DATA frame on this stream") });
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("Unexpected DATA frame for stream mismatch") });
                 }
 
                 binary_request.data.push(payload);
@@ -1183,6 +1183,8 @@ async fn handle_frame_data(connection: &mut Connection,
                 }
 
                 return Ok(());
+            } else {
+                return Err(ConnectionError::ConnectionError { error_code: ErrorCode::StreamClosed, additional_debug_data: String::from("DATA before (end) HEADERS") });
             }
         }
     }
