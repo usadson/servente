@@ -1422,7 +1422,7 @@ checksum = "771d4d9c4163ee138805e12c710dd365e4f44be8be0503cb1bb9eb989425d9c9"
 
 [[package]]
 name = "servente"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "brotli",
