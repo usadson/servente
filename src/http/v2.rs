@@ -555,7 +555,7 @@ impl Connection {
                 super::message::BodyKind::CachedBytes(versions, coding) => {
                     self.send_data_frame_from_slice(stream_id, versions.get_version(coding)).await?;
                 }
-                super::message::BodyKind::File(_) => todo!(),
+                super::message::BodyKind::File{ .. } => todo!(),
                 super::message::BodyKind::String(data) => {
                     self.send_data_frame_from_slice(stream_id, data.as_bytes()).await?;
                 }
