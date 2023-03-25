@@ -25,3 +25,5 @@ jobs:
       run: cargo build --verbose --locked --profile ${{ matrix.profile }}
     - name: Run tests
       run: cargo test --verbose --locked --profile ${{ matrix.profile }}
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
