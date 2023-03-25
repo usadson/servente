@@ -216,6 +216,7 @@ pub enum HeaderName {
     Other(String),
 
     Accept,
+    AcceptCharset,
     AcceptEncoding,
     AcceptLanguage,
     AcceptRanges,
@@ -228,6 +229,7 @@ pub enum HeaderName {
     AccessControlRequestHeaders,
     AccessControlRequestMethod,
     Age,
+    Allow,
     AltSvc,
     Authorization,
     CacheControl,
@@ -235,9 +237,11 @@ pub enum HeaderName {
     Close,
     Connection,
     Cookie,
+    ContentDisposition,
     ContentEncoding,
     ContentLanguage,
     ContentLength,
+    ContentLocation,
     ContentRange,
     ContentSecurityPolicy,
     ContentSecurityPolicyReportOnly,
@@ -247,24 +251,34 @@ pub enum HeaderName {
     DNT,
     EarlyData,
     ETag,
+    Expect,
     ExpectCT,
+    Expires,
     Forwarded,
+    From,
     Host,
     IfMatch,
     IfModifiedSince,
     IfNoneMatch,
     IfRange,
     IfUnmodifiedSince,
+    KeepAlive,
     LastModified,
     Link,
     Location,
+    MaxForwards,
     ProxyStatus,
     Origin,
     Pragma,
+    ProxyAuthenticate,
+    ProxyAuthorization,
+    ProxyConnection,
     Purpose,
     Range,
     Referer,
     ReferrerPolicy,
+    Refresh,
+    RetryAfter,
     SecChUa,
     SecChUaMobile,
     SecChUaPlatform,
@@ -291,6 +305,7 @@ pub enum HeaderName {
     UserAgent,
     Vary,
     Via,
+    WwwAuthenticate,
     XContentTypeOptions,
     XForwaredFor,
     XFrameOptions,
@@ -300,6 +315,7 @@ pub enum HeaderName {
 
 static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = phf_map!(
     UniCase::ascii("accept") => HeaderName::Accept,
+    UniCase::ascii("accept-charset") => HeaderName::AcceptCharset,
     UniCase::ascii("accept-encoding") => HeaderName::AcceptEncoding,
     UniCase::ascii("accept-language") => HeaderName::AcceptLanguage,
     UniCase::ascii("accept-ranges") => HeaderName::AcceptRanges,
@@ -312,6 +328,7 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
     UniCase::ascii("access-control-request-headers") => HeaderName::AccessControlRequestHeaders,
     UniCase::ascii("access-control-request-method") => HeaderName::AccessControlRequestMethod,
     UniCase::ascii("age") => HeaderName::Age,
+    UniCase::ascii("allow") => HeaderName::Allow,
     UniCase::ascii("alt-svc") => HeaderName::AltSvc,
     UniCase::ascii("authorization") => HeaderName::Authorization,
     UniCase::ascii("cache-control") => HeaderName::CacheControl,
@@ -319,9 +336,11 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
     UniCase::ascii("close") => HeaderName::Close,
     UniCase::ascii("connection") => HeaderName::Connection,
     UniCase::ascii("cookie") => HeaderName::Cookie,
+    UniCase::ascii("content-disposition") => HeaderName::ContentDisposition,
     UniCase::ascii("content-encoding") => HeaderName::ContentEncoding,
     UniCase::ascii("content-length") => HeaderName::ContentLength,
     UniCase::ascii("content-language") => HeaderName::ContentLanguage,
+    UniCase::ascii("content-location") => HeaderName::ContentLocation,
     UniCase::ascii("content-range") => HeaderName::ContentRange,
     UniCase::ascii("content-security-policy") => HeaderName::ContentSecurityPolicy,
     UniCase::ascii("content-security-policy-report-only") => HeaderName::ContentSecurityPolicyReportOnly,
@@ -331,24 +350,34 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
     UniCase::ascii("dnt") => HeaderName::DNT,
     UniCase::ascii("early-data") => HeaderName::EarlyData,
     UniCase::ascii("etag") => HeaderName::ETag,
+    UniCase::ascii("expect") => HeaderName::Expect,
     UniCase::ascii("expect-ct") => HeaderName::ExpectCT,
+    UniCase::ascii("expires") => HeaderName::Expires,
     UniCase::ascii("forwarded") => HeaderName::Forwarded,
+    UniCase::ascii("from") => HeaderName::From,
     UniCase::ascii("host") => HeaderName::Host,
     UniCase::ascii("if-match") => HeaderName::IfMatch,
     UniCase::ascii("if-modified-since") => HeaderName::IfModifiedSince,
     UniCase::ascii("if-none-match") => HeaderName::IfNoneMatch,
     UniCase::ascii("if-range") => HeaderName::IfRange,
     UniCase::ascii("if-unmodified-since") => HeaderName::IfUnmodifiedSince,
+    UniCase::ascii("keep-alive") => HeaderName::KeepAlive,
     UniCase::ascii("last-modified") => HeaderName::LastModified,
     UniCase::ascii("link") => HeaderName::Link,
     UniCase::ascii("location") => HeaderName::Location,
+    UniCase::ascii("max-forwards") => HeaderName::MaxForwards,
     UniCase::ascii("origin") => HeaderName::Origin,
     UniCase::ascii("pragma") => HeaderName::Pragma,
+    UniCase::ascii("proxy-authenticate") => HeaderName::ProxyAuthenticate,
+    UniCase::ascii("proxy-authorization") => HeaderName::ProxyAuthorization,
+    UniCase::ascii("proxy-connection") => HeaderName::ProxyConnection,
     UniCase::ascii("purpose") => HeaderName::Purpose,
     UniCase::ascii("proxy-status") => HeaderName::ProxyStatus,
     UniCase::ascii("range") => HeaderName::Range,
     UniCase::ascii("referer") => HeaderName::Referer,
     UniCase::ascii("referrer-policy") => HeaderName::ReferrerPolicy,
+    UniCase::ascii("refresh") => HeaderName::Refresh,
+    UniCase::ascii("retry-after") => HeaderName::RetryAfter,
     UniCase::ascii("sec-ch-ua") => HeaderName::SecChUa,
     UniCase::ascii("sec-ch-ua-mobile") => HeaderName::SecChUaMobile,
     UniCase::ascii("sec-ch-ua-platform") => HeaderName::SecChUaPlatform,
@@ -375,6 +404,7 @@ static STRING_TO_HEADER_NAME_MAP: phf::Map<UniCase<&'static str>, HeaderName> = 
     UniCase::ascii("user-agent") => HeaderName::UserAgent,
     UniCase::ascii("vary") => HeaderName::Vary,
     UniCase::ascii("via") => HeaderName::Via,
+    UniCase::ascii("www-authenticate") => HeaderName::WwwAuthenticate,
     UniCase::ascii("x-content-type-options") => HeaderName::XContentTypeOptions,
     UniCase::ascii("x-forwarded-for") => HeaderName::XForwaredFor,
     UniCase::ascii("x-frame-options") => HeaderName::XFrameOptions,
@@ -402,6 +432,7 @@ impl HeaderName {
             HeaderName::Other(str) => str,
 
             HeaderName::Accept => "Accept",
+            HeaderName::AcceptCharset => "Accept-Charset",
             HeaderName::AcceptEncoding => "Accept-Encoding",
             HeaderName::AcceptLanguage => "Accept-Language",
             HeaderName::AcceptRanges => "Accept-Ranges",
@@ -414,6 +445,7 @@ impl HeaderName {
             HeaderName::AccessControlRequestHeaders => "Access-Control-Request-Headers",
             HeaderName::AccessControlRequestMethod => "Access-Control-Request-Method",
             HeaderName::Age => "Age",
+            HeaderName::Allow => "Allow",
             HeaderName::AltSvc => "Alt-Svc",
             HeaderName::Authorization => "Authorization",
             HeaderName::CacheControl => "Cache-Control",
@@ -421,9 +453,11 @@ impl HeaderName {
             HeaderName::Close => "Close",
             HeaderName::Connection => "Connection",
             HeaderName::Cookie => "Cookie",
+            HeaderName::ContentDisposition => "Content-Disposition",
             HeaderName::ContentEncoding => "Content-Encoding",
             HeaderName::ContentLanguage => "Content-Language",
             HeaderName::ContentLength => "Content-Length",
+            HeaderName::ContentLocation => "Content-Location",
             HeaderName::ContentRange => "Content-Range",
             HeaderName::ContentSecurityPolicy => "Content-Security-Policy",
             HeaderName::ContentSecurityPolicyReportOnly => "Content-Security-Policy-Report-Only",
@@ -433,24 +467,34 @@ impl HeaderName {
             HeaderName::DNT => "DNT",
             HeaderName::EarlyData => "Early-Data",
             HeaderName::ETag => "ETag",
-            HeaderName::ExpectCT => "ExpectCT",
+            HeaderName::Expect => "Expect",
+            HeaderName::ExpectCT => "Expect-CT",
+            HeaderName::Expires => "Expires",
             HeaderName::Forwarded => "Forwarded",
+            HeaderName::From => "From",
             HeaderName::Host => "Host",
             HeaderName::IfMatch => "If-Match",
             HeaderName::IfModifiedSince => "If-Modified-Since",
             HeaderName::IfNoneMatch => "If-None-Match",
             HeaderName::IfRange => "If-Range",
             HeaderName::IfUnmodifiedSince => "If-Unmodified-Since",
+            HeaderName::KeepAlive => "Keep-Alive",
             HeaderName::LastModified => "Last-Modified",
             HeaderName::Link => "Link",
             HeaderName::Location => "Location",
+            HeaderName::MaxForwards => "Max-Forwards",
             HeaderName::Origin => "Origin",
             HeaderName::Pragma => "Pragma",
+            HeaderName::ProxyAuthenticate => "Proxy-Authenticate",
+            HeaderName::ProxyAuthorization => "Proxy-Authorization",
+            HeaderName::ProxyConnection => "Proxy-Connection",
             HeaderName::ProxyStatus => "Proxy-Status",
             HeaderName::Purpose => "Purpose",
             HeaderName::Range => "Range",
             HeaderName::Referer => "Referer",
             HeaderName::ReferrerPolicy => "Referrer-Policy",
+            HeaderName::Refresh => "Refresh",
+            HeaderName::RetryAfter => "Retry-After",
             HeaderName::SecChUa => "Sec-Ch-Ua",
             HeaderName::SecChUaMobile => "Sec-Ch-Ua-Mobile",
             HeaderName::SecChUaPlatform => "Sec-Ch-Ua-Platform",
@@ -477,12 +521,122 @@ impl HeaderName {
             HeaderName::UserAgent => "User-Agent",
             HeaderName::Vary => "Vary",
             HeaderName::Via => "Via",
+            HeaderName::WwwAuthenticate => "WWW-Authenticate",
             HeaderName::XContentTypeOptions => "X-Content-Type-Options",
             HeaderName::XForwaredFor => "X-Forwarded-For",
             HeaderName::XFrameOptions => "X-Frame-Options",
             HeaderName::XRequestedWith => "X-Requested-With",
             HeaderName::XXSSProtection => "X-XSS-Protection",
         }
+    }
+
+    /// Get the lowercase format of the header, for use in HTTP/2.
+    ///
+    /// # HTTP/2
+    /// _RFC 9113, section 8.2 Header Fields_ states:
+    /// > Field names MUST be converted to lowercase when constructing an
+    /// > HTTP/2 message.
+    pub fn to_string_lowercase(&self) -> Cow<'static, str> {
+        Cow::Borrowed(match self {
+            HeaderName::Other(str) => return Cow::Owned(str.to_ascii_lowercase()),
+
+            HeaderName::Accept => "accept",
+            HeaderName::AcceptCharset => "accept-charset",
+            HeaderName::AcceptEncoding => "accept-encoding",
+            HeaderName::AcceptLanguage => "accept-language",
+            HeaderName::AcceptRanges => "accept-ranges",
+            HeaderName::AccessControlAllowCredentials => "access-control-allow-credentials",
+            HeaderName::AccessControlAllowHeaders => "access-control-allow-headers",
+            HeaderName::AccessControlAllowMethods => "access-control-allow-methods",
+            HeaderName::AccessControlAllowOrigin => "access-control-allow-origin",
+            HeaderName::AccessControlExposeHeaders => "access-control-expose-headers",
+            HeaderName::AccessControlMaxAge => "access-control-max-age",
+            HeaderName::AccessControlRequestHeaders => "access-control-request-headers",
+            HeaderName::AccessControlRequestMethod => "access-control-request-method",
+            HeaderName::Age => "age",
+            HeaderName::Allow => "allow",
+            HeaderName::AltSvc => "alt-svc",
+            HeaderName::Authorization => "authorization",
+            HeaderName::CacheControl => "cache-control",
+            HeaderName::CacheStatus => "cache-status",
+            HeaderName::Close => "close",
+            HeaderName::Connection => "connection",
+            HeaderName::Cookie => "cookie",
+            HeaderName::ContentDisposition => "content-disposition",
+            HeaderName::ContentEncoding => "content-encoding",
+            HeaderName::ContentLanguage => "content-language",
+            HeaderName::ContentLength => "content-length",
+            HeaderName::ContentLocation => "content-location",
+            HeaderName::ContentRange => "content-range",
+            HeaderName::ContentSecurityPolicy => "content-security-policy",
+            HeaderName::ContentSecurityPolicyReportOnly => "content-security-policy-report-only",
+            HeaderName::ContentType => "content-type",
+            HeaderName::CrossOriginResourcePolicy => "cross-origin-resource-policy",
+            HeaderName::Date => "date",
+            HeaderName::DNT => "dnt",
+            HeaderName::EarlyData => "early-data",
+            HeaderName::ETag => "etag",
+            HeaderName::Expect => "expect",
+            HeaderName::ExpectCT => "expect-ct",
+            HeaderName::Expires => "expires",
+            HeaderName::Forwarded => "forwarded",
+            HeaderName::From => "from",
+            HeaderName::Host => "host",
+            HeaderName::IfMatch => "if-match",
+            HeaderName::IfModifiedSince => "if-modified-since",
+            HeaderName::IfNoneMatch => "if-none-match",
+            HeaderName::IfRange => "if-range",
+            HeaderName::IfUnmodifiedSince => "if-unmodified-since",
+            HeaderName::KeepAlive => "keep-alive",
+            HeaderName::LastModified => "last-modified",
+            HeaderName::Link => "link",
+            HeaderName::Location => "location",
+            HeaderName::MaxForwards => "max-forwards",
+            HeaderName::Origin => "origin",
+            HeaderName::Pragma => "pragma",
+            HeaderName::ProxyAuthenticate => "proxy-authenticate",
+            HeaderName::ProxyAuthorization => "proxy-authorization",
+            HeaderName::ProxyConnection => "proxy-connection",
+            HeaderName::ProxyStatus => "proxy-status",
+            HeaderName::Purpose => "purpose",
+            HeaderName::Range => "range",
+            HeaderName::Referer => "referer",
+            HeaderName::ReferrerPolicy => "referrer-policy",
+            HeaderName::Refresh => "refresh",
+            HeaderName::RetryAfter => "retry-after",
+            HeaderName::SecChUa => "sec-ch-ua",
+            HeaderName::SecChUaMobile => "sec-ch-ua-mobile",
+            HeaderName::SecChUaPlatform => "sec-ch-ua-platform",
+            HeaderName::SecFetchDest => "sec-fetch-dest",
+            HeaderName::SecFetchMode => "sec-fetch-mode",
+            HeaderName::SecFetchSite => "sec-fetch-site",
+            HeaderName::SecFetchUser => "sec-fetch-user",
+            HeaderName::SecPurpose => "sec-purpose",
+            HeaderName::SecWebSocketAccept => "sec-websocket-accept",
+            HeaderName::SecWebSocketExtensions => "sec-websocket-extensions",
+            HeaderName::SecWebSocketKey => "sec-websocket-key",
+            HeaderName::SecWebSocketProtocol => "sec-websocket-protocol",
+            HeaderName::SecWebSocketVersion => "sec-websocket-version",
+            HeaderName::Server => "server",
+            HeaderName::ServerTiming => "server-timing",
+            HeaderName::SetCookie => "set-cookie",
+            HeaderName::StrictTransportSecurity => "strict-transport-security",
+            HeaderName::TE => "te",
+            HeaderName::TimingAllowOrigin => "timing-allow-origin",
+            HeaderName::Trailer => "trailer",
+            HeaderName::TransferEncoding => "transfer-encoding",
+            HeaderName::Upgrade => "upgrade",
+            HeaderName::UpgradeInsecureRequests => "upgrade-insecure-requests",
+            HeaderName::UserAgent => "user-agent",
+            HeaderName::Vary => "vary",
+            HeaderName::Via => "via",
+            HeaderName::WwwAuthenticate => "www-authenticate",
+            HeaderName::XContentTypeOptions => "x-content-type-options",
+            HeaderName::XForwaredFor => "x-forwarded-for",
+            HeaderName::XFrameOptions => "x-frame-options",
+            HeaderName::XRequestedWith => "x-requested-with",
+            HeaderName::XXSSProtection => "x-xss-protection",
+        })
     }
 }
 
@@ -568,6 +722,13 @@ impl HeaderValue {
         }
     }
 
+    /// Get the header in string form.
+    pub fn to_string(&self) -> String {
+        let mut result = String::new();
+        self.append_to_message(&mut result);
+        result
+    }
+
     /// Parses the value as a number.
     #[must_use]
     pub fn parse_number(&self) -> Option<usize> {
@@ -577,6 +738,29 @@ impl HeaderValue {
             HeaderValue::Size(size) => Some(*size),
             _ => None,
         }
+    }
+
+    /// Calculate the length of the header value in string characters.
+    pub fn string_length(&self) -> usize {
+        // Fast path, when the type is a string, or can easily be mapped into
+        // one:
+        match self {
+            Self::StaticString(str) => return str.len(),
+            Self::String(str) => return str.len(),
+            Self::ContentCoding(coding) => return coding.http_identifier().len(),
+            Self::ContentRange(_) => (),
+            Self::DateTime(_) => (),
+            Self::MediaType(media_type) => return media_type.as_str().len(),
+            Self::SecFetchDest(sec_fetch_dest) => return sec_fetch_dest.as_str().len(),
+            Self::Size(_) => (),
+        }
+
+        // Otherwise slow path, format it into a new string and get the length
+        // of the string after formatting.
+
+        let mut tmp_str = String::new();
+        self.append_to_message(&mut tmp_str);
+        tmp_str.len()
     }
 }
 
@@ -669,6 +853,11 @@ impl HeaderMap {
         }
 
         false
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.headers.len()
     }
 
     #[must_use]
@@ -780,6 +969,66 @@ pub enum Method {
     Update,
     UpdateRedirectRef,
     VersionControl,
+}
+
+impl Method {
+    /// Get the method in string form.
+    ///
+    /// # Notes
+    /// Header names are case-sensitive, as per
+    /// [RFC 9110 - Section 9.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.1-5):
+    /// > The method token is case-sensitive because it might be used as a
+    /// > gateway to object-based systems with case-sensitive method names. By
+    /// > convention, standardized methods are defined in all-uppercase US-ASCII
+    /// > letters.
+    ///
+    /// # References
+    /// * [RFC 9110 - Section 9. Methods](https://www.rfc-editor.org/rfc/rfc9110.html#section-9)
+    /// * [IANA Hypertext Transfer Protocol (HTTP) Method Registry](https://www.iana.org/assignments/http-methods/http-methods.xhtml)
+    pub fn as_string(&self) -> &str {
+        match self {
+            Self::Other(str) => str,
+            Self::Acl => "ACL",
+            Self::BaselineControl => "BASELINE-CONTROL",
+            Self::Bind => "BIND",
+            Self::CheckIn => "CHECKIN",
+            Self::CheckOut => "CHECKOUT",
+            Self::Connect => "CONNECT",
+            Self::Copy => "COPY",
+            Self::Delete => "DELETE",
+            Self::Get => "GET",
+            Self::Head => "HEAD",
+            Self::Label => "LABEL",
+            Self::Link => "LINK",
+            Self::Lock => "LOCK",
+            Self::Merge => "MERGE",
+            Self::MkActivity => "MKACTIVITY",
+            Self::MkCalendar => "MKCALENDAR",
+            Self::MkCol => "MKCOL",
+            Self::MkRedirectRef => "MKREDIRECTREF",
+            Self::MkWorkspace => "MKWORKSPACE",
+            Self::Move => "MOVE",
+            Self::Options => "OPTIONS",
+            Self::OrderPatch => "ORDERPATCH",
+            Self::Patch => "PATCH",
+            Self::Post => "POST",
+            Self::Pri => "PRI",
+            Self::PropFind => "PROPFIND",
+            Self::PropPatch => "PROPPATCH",
+            Self::Put => "PUT",
+            Self::Rebind => "REBIND",
+            Self::Report => "REPORT",
+            Self::Search => "SEARCH",
+            Self::Trace => "TRACE",
+            Self::Unbind => "UNBIND",
+            Self::Uncheckout => "UNCHECKOUT",
+            Self::Unlink => "UNLINK",
+            Self::Unlock => "UNLOCK",
+            Self::Update => "UPDATE",
+            Self::UpdateRedirectRef => "UPDATEREDIRECTREF",
+            Self::VersionControl => "VERSION-CONTROL",
+        }
+    }
 }
 
 static METHOD_MAP: phf::Map<UniCase<&'static str>, Method> = phf_map!(
@@ -1041,4 +1290,46 @@ pub enum ContentRangeHeaderValue {
         /// The complete length of the resource.
         complete_length: usize
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Checks whether or not all the names in the `STRING_TO_HEADER_NAME_MAP`
+    /// are valid, whether the `to_string_h1()` and `to_string_lowercase()`
+    /// methods return the same string case-insensitve,
+    /// and whether the `to_string_lowercase()` method returns a string
+    /// that is all lowercase.
+    #[test]
+    fn test_header_name_to_string() {
+        for (str, name) in STRING_TO_HEADER_NAME_MAP.entries() {
+            assert_eq!(str, &UniCase::ascii(name.to_string_h1()));
+            assert_eq!(str, &UniCase::ascii(name.to_string_lowercase()));
+
+            assert!(name.to_string_h1().is_ascii());
+            assert!(name.to_string_lowercase().is_ascii());
+
+            assert!(!name.to_string_lowercase().bytes().any(|b| (b as char).is_uppercase()));
+
+            assert!(!name.to_string_h1().split('-').any(|str| !str.is_empty() && str.chars().nth(0).unwrap().is_ascii_lowercase()),
+                "HTTP/1.1 Header names should have uppercase letters");
+        }
+    }
+
+    #[test]
+    fn test_header_value_string_length() {
+        assert_eq!(HeaderValue::StaticString("hello").string_length(), 5);
+        assert_eq!(HeaderValue::String(String::new()).string_length(), 0);
+        assert_eq!(HeaderValue::String(String::from("This is a line.")).string_length(), 15);
+        assert_eq!(HeaderValue::ContentCoding(ContentCoding::Brotli).string_length(), 2);
+        assert_eq!(HeaderValue::ContentCoding(ContentCoding::Gzip).string_length(), 4);
+        assert_eq!(HeaderValue::ContentRange(ContentRangeHeaderValue::Range { start: 99, end: 4783, complete_length: None }).string_length(), "bytes 99-4783/*".len());
+        assert_eq!(HeaderValue::ContentRange(ContentRangeHeaderValue::Range { start: 0, end: 4, complete_length: Some(5) }).string_length(), "bytes 0-4/5".len());
+        assert_eq!(HeaderValue::ContentRange(ContentRangeHeaderValue::Range { start: 0, end: 4, complete_length: Some(60) }).string_length(), "bytes 0-4/60".len());
+        assert_eq!(HeaderValue::ContentRange(ContentRangeHeaderValue::Unsatisfied { complete_length: 10 }).string_length(), "bytes */10".len());
+        assert_eq!(HeaderValue::MediaType(MediaType::HTML).string_length(), MediaType::HTML.as_str().len());
+        assert_eq!(HeaderValue::SecFetchDest(SecFetchDest::Document).string_length(), "document".len());
+        assert_eq!(HeaderValue::Size(100).string_length(), 3);
+    }
 }

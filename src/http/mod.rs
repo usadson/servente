@@ -68,13 +68,13 @@ impl From<io::Error> for Error {
 }
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
-fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Result<Option<Response>, io::Error> {
+fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Option<Response> {
     if let Some(etag) = request.headers.get(&HeaderName::IfNoneMatch) {
         if etag.as_str_no_convert().unwrap() == format_system_time_as_weak_etag(modified_date) {
             let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
             response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
             response.headers.set(HeaderName::ETag, etag.clone());
-            return Ok(Some(response));
+            return Some(response);
         }
     }
 
@@ -85,7 +85,7 @@ fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime)
                     let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
                     response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
                     response.headers.set(HeaderName::LastModified, if_modified_since.to_owned());
-                    return Ok(Some(response));
+                    return Some(response);
                 }
             }
 
@@ -95,17 +95,17 @@ fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime)
         }
     }
 
-    Ok(None)
+    None
 }
 
 /// Finishes a response for an error response.
-pub async fn finish_response_error(response: &mut Response) -> Result<(), io::Error> {
+pub async fn finish_response_error(response: &mut Response) {
     response.headers.set(HeaderName::Connection, HeaderValue::from("close"));
     finish_response_general(response).await
 }
 
 /// Finishes a response for both normal and error response.
-async fn finish_response_general(response: &mut Response) -> Result<(), io::Error> {
+async fn finish_response_general(response: &mut Response) {
     if let Some(body) = &response.body {
         if !response.headers.contains(&HeaderName::LastModified) {
             if let BodyKind::File { metadata, ..} = body {
@@ -129,12 +129,10 @@ async fn finish_response_general(response: &mut Response) -> Result<(), io::Erro
     if !response.headers.contains(&HeaderName::Date) {
         response.headers.set(HeaderName::Date, SystemTime::now().into());
     }
-
-    Ok(())
 }
 
 /// Finishes a response for a normal (OK) response.
-pub async fn finish_response_normal(request: &Request, response: &mut Response) -> Result<(), io::Error> {
+pub async fn finish_response_normal(request: &Request, response: &mut Response) {
     if response.body.is_some() {
         if !response.headers.contains(&HeaderName::ContentType) {
             response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(request.target.as_str()).clone()));
@@ -164,16 +162,27 @@ pub async fn handle_parse_error(error: HttpParseError) -> Response {
 }
 
 /// Handles a request.
-pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Result<Response, Error> {
+pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Response {
     let controller = config.handler_controller.clone();
     if let Some(result) = controller.check_handle(request) {
-        return result.map_err(|error| Error::Other(io::Error::new(io::ErrorKind::Other, error)));
+        return match result {
+            Ok(res) => res,
+            Err(e) => {
+                #[cfg(feature = "debugging")]
+                println!("[HTTP] Failed to invoke handler: {:#?}", e);
+                _ = e;
+
+                let mut response = Response::with_status_and_string_body(StatusCode::InternalServerError, "Internal Server Error");
+                _ = finish_response_general(&mut response).await;
+                response
+            }
+        };
     }
 
     if let RequestTarget::Origin { path, .. } = &request.target {
         let request_target = path.as_str();
         if request.method != Method::Get {
-            return Ok(Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed"));
+            return Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed");
         }
 
         let Ok(current_directory) = current_dir() else {
@@ -182,22 +191,22 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
 
         let root = current_directory.join("wwwroot");
         let Ok(url_decoded) = urlencoding::decode(&request_target[1..]) else {
-            return Ok(Response::with_status_and_string_body(StatusCode::BadRequest, "Bad Request"));
+            return Response::with_status_and_string_body(StatusCode::BadRequest, "Bad Request");
         };
 
         let path = root.join(url_decoded.into_owned());
         if !path.starts_with(&root) {
-            return Ok(Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display())));
+            return Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display()));
         }
 
         for component in path.components() {
             if let std::path::Component::ParentDir = component {
-                return Ok(Response::with_status_and_string_body(StatusCode::Forbidden, "Forbidden"));
+                return Response::with_status_and_string_body(StatusCode::Forbidden, "Forbidden");
             }
         }
 
-        if let Some(served_file_response) = serve_file(request, &path).await? {
-            return Ok(served_file_response);
+        if let Some(served_file_response) = serve_file(request, &path).await {
+            return served_file_response;
         };
 
         if let Ok(metadata) = std::fs::metadata(&path) {
@@ -207,8 +216,8 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
                     if metadata.is_file() {
                         drop(metadata);
 
-                        if let Some(served_file_response) = serve_file(request, &path).await? {
-                            return Ok(served_file_response);
+                        if let Some(served_file_response) = serve_file(request, &path).await {
+                            return served_file_response;
                         }
                     }
                 }
@@ -219,22 +228,22 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Resul
             return handle_welcome_page(request, request_target).await;
         }
 
-        return Ok(Response::with_status_and_string_body(StatusCode::NotFound, "Not Found"));
+        return Response::with_status_and_string_body(StatusCode::NotFound, "Not Found");
     }
 
-    Ok(Response::with_status_and_string_body(StatusCode::BadRequest, "Invalid Target"))
+    Response::with_status_and_string_body(StatusCode::BadRequest, "Invalid Target")
 }
 
 /// Serves the welcome page to the client if the `wwwroot/index.html` file does
 /// not exist.
-async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<Response, Error> {
+async fn handle_welcome_page(request: &Request, request_target: &str) -> Response {
     if !request.headers.contains(&HeaderName::ETag) {
         if let Some(modified_since) = request.headers.get(&HeaderName::IfModifiedSince) {
             if let Some(modified_since) = modified_since.as_str_no_convert() {
                 if let Ok(modified_since) = httpdate::parse_http_date(modified_since) {
                     if let Ok(duration) = SystemTime::UNIX_EPOCH.duration_since(modified_since) {
                         if duration.as_secs() < 600 {
-                            return Ok(serve_welcome_page_not_modified(request));
+                            return serve_welcome_page_not_modified(request);
                         }
                     }
                 }
@@ -265,10 +274,10 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
                             response.headers.set(HeaderName::ContentLanguage, "nl".into());
                             response.headers.set(HeaderName::ETag, "welcome-nl".into());
                             if request_etag == Some("welcome-nl") {
-                                return Ok(serve_welcome_page_not_modified(request));
+                                return serve_welcome_page_not_modified(request);
                             }
                         } else if request_etag == Some("welcome-en") {
-                            return Ok(serve_welcome_page_not_modified(request));
+                            return serve_welcome_page_not_modified(request);
                         }
                     }
                 }
@@ -279,38 +288,38 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Result<
             response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML_NL));
             response.headers.set(HeaderName::ContentLanguage, "nl".into());
         }
-        _ => return Ok(Response::with_status_and_string_body(StatusCode::NotFound, "Not Found")),
+        _ => return Response::with_status_and_string_body(StatusCode::NotFound, "Not Found"),
     }
 
-    Ok(response)
+    response
 }
 
-async fn serve_file(request: &Request, path: &Path) -> Result<Option<Response>, Error> {
-    if let Some(response) = serve_file_from_cache(request, path)? {
-        return Ok(Some(response));
+async fn serve_file(request: &Request, path: &Path) -> Option<Response> {
+    if let Some(response) = serve_file_from_cache(request, path) {
+        return Some(response);
     }
 
     serve_file_from_disk(path).await
 }
 
 /// Serves a file from the cache if it is available.
-async fn serve_file_from_disk(path: &Path) -> Result<Option<Response>, Error> {
+async fn serve_file_from_disk(path: &Path) -> Option<Response> {
     // Check if the file is allowed to be served. The cache already checked
     // this, but we need to check it again for files that are not cached.
     if !resources::is_file_allowed_to_be_served(path.to_string_lossy().as_ref()) {
-        return Ok(None);
+        return None;
     }
 
     let Ok(file) = tokio::fs::File::open(path).await else {
-        return Ok(None);
+        return None;
     };
 
     let Ok(metadata) = file.metadata().await else {
-        return Ok(None);
+        return None;
     };
 
     if !metadata.is_file() {
-        return Ok(None);
+        return None;
     }
 
     cache::maybe_cache_file(path).await;
@@ -324,18 +333,18 @@ async fn serve_file_from_disk(path: &Path) -> Result<Option<Response>, Error> {
     response.body = Some(BodyKind::File { handle: file, metadata });
     response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
 
-    Ok(Some(response))
+    Some(response)
 }
 
 /// Serves a file from the cache if it is available.
-fn serve_file_from_cache(request: &Request, path: &Path) -> Result<Option<Response>, Error> {
+fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
     let Some(cached) = cache::FILE_CACHE.get(path.to_string_lossy().as_ref()) else {
-        return Ok(None)
+        return None
     };
 
     if let Some(modified_date) = cached.value().modified_date {
-        if let Some(not_modified_response) = check_not_modified(request, path, modified_date)? {
-            return Ok(Some(not_modified_response));
+        if let Some(not_modified_response) = check_not_modified(request, path, modified_date) {
+            return Some(not_modified_response);
         }
     }
 
@@ -368,7 +377,7 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Result<Option<Respon
         }
     }
 
-    return Ok(Some(response));
+    return Some(response);
 }
 
 /// Serve the welcome page response with a 304 Not Modified status code.

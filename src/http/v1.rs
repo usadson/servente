@@ -13,7 +13,9 @@ use tokio_rustls::{TlsAcceptor, server::TlsStream};
 
 use std::{
     io::{self, SeekFrom},
-    time::Duration, mem::swap,
+    mem::swap,
+    time::Duration,
+    sync::Arc,
 };
 
 #[cfg(feature = "ktls")]
@@ -277,7 +279,7 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
             match error {
                 Error::ParseError(error) => {
                     let mut response = handle_parse_error(error).await;
-                    finish_response_error(&mut response).await?;
+                    finish_response_error(&mut response).await;
                     send_response(connection.buf_writer, response, None).await?;
                     return Err(ExchangeError::MalformedData);
                 }
@@ -301,7 +303,7 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
         match error {
             Error::ParseError(error) => {
                 let mut response = handle_parse_error(error).await;
-                finish_response_error(&mut response).await?;
+                finish_response_error(&mut response).await;
                 send_response(connection.buf_writer, response, None).await?;
                 return Err(ExchangeError::MalformedData);
             }
@@ -313,16 +315,8 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
 
     #[cfg(feature = "debugging")]
     let start_handling = Instant::now();
-    let mut response = match handle_request(&request, config).await {
-        Ok(response) => response,
-        Err(error) => {
-            println!("{:?}>: {:?} => {:?}", request.method, request.target, error);
-            let mut response = Response::with_status_and_string_body(StatusCode::InternalServerError, String::from("Internal Server Error"));
-            finish_response_error(&mut response).await?;
-            response
-        }
-    };
-    finish_response_normal(&request, &mut response).await?;
+    let mut response = handle_request(&request, config).await;
+    finish_response_normal(&request, &mut response).await;
 
     if let Some(BodyKind::File { metadata, .. }) = &response.body {
         if !metadata.is_file() {
@@ -334,7 +328,7 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
                 response.body = Some(BodyKind::StaticString("Warning: tried to send a non-file as response body"));
             }
 
-            finish_response_error(&mut response).await?;
+            finish_response_error(&mut response).await;
             send_response(connection.buf_writer, response, None).await?;
 
             return Ok(());
@@ -377,8 +371,7 @@ async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request
         let mut response = Response::with_status_and_string_body(StatusCode::BadRequest,
             "Invalid HTTP/2 PRI upgrade body");
         response.headers.set(HeaderName::Connection, "close".into());
-        let status = finish_response_error(&mut response).await;
-        debug_assert!(status.is_ok());
+        finish_response_error(&mut response).await;
         send_response(connection.buf_writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
     }
@@ -387,8 +380,7 @@ async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request
         let mut response = Response::with_status_and_string_body(StatusCode::HTTPVersionNotSupported,
                 "Invalid HTTP upgrade using PRI: expected version HTTP/2.0");
         response.headers.set(HeaderName::Connection, "close".into());
-        let status = finish_response_error(&mut response).await;
-        debug_assert!(status.is_ok());
+        finish_response_error(&mut response).await;
         send_response(connection.buf_writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
     }
@@ -398,8 +390,7 @@ async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request
         let mut response = Response::with_status_and_string_body(StatusCode::BadRequest,
             "Invalid preface start request");
         response.headers.set(HeaderName::Connection, "close".into());
-        let status = finish_response_error(&mut response).await;
-        debug_assert!(status.is_ok());
+        finish_response_error(&mut response).await;
         send_response(connection.buf_writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
     }
@@ -495,7 +486,7 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
         if let Err(e) = handle_exchange(&mut connection, &config).await {
             #[cfg(feature = "http2")]
             if let ExchangeError::Http2Upgrade = e {
-                super::v2::handle_client(reader, writer).await;
+                super::v2::handle_client(reader, writer, Arc::new(config)).await;
                 return;
             }
 
