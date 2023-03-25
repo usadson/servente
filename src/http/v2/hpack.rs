@@ -179,17 +179,64 @@ impl Compressor {
     }
 }
 
+// TODO: some `error`s MUST be conveyed by a `COMPRESSION_ERROR`, and some MUST
+//       be with a `400 Bad Request`. `COMPRESSION_ERROR` is now used as the
+//       only way of feedback.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum DecompressionError {
     LookupError(DynamicTableLookupError),
     NoPath,
     NoMethod,
+    NoScheme,
     UnexpectedEndOfFile,
     DynamicTableUpdateTooLarge,
     DynamicTableUpdateNotFirst,
 
+    DuplicateAuthority,
     DuplicateMethod,
     DuplicatePath,
+    DuplicateScheme,
+
+    PseudoAfterRegularFields,
+
+    EmptyPath,
+
+    FieldNameEmpty,
+    FieldNameInvalidNonVisibleAscii,
+    FieldNameInvalidAsciiSpace,
+    FieldNameInvalidUppercase,
+    FieldNameStartWithColonNonPseudoField,
+    FieldNameExtendedAsciiUnicode,
+
+    FieldValueContainsNul,
+    FieldValueContainsCarriageReturn,
+    FieldValueContainsLineFeed,
+    FieldValueStartsWithWhitespace,
+    FieldValueEndsWithWhitespace,
+
+    /// HTTP/2 does not use the headers conveying connection-specific semantics
+    /// of text-based HTTP versions (e.g. HTTP/1.1), since they are represented
+    /// as core parts of the protocol.
+    ///
+    /// # Examples
+    /// In **HTTP/1.1**, the following might be transmitted:
+    /// ```text
+    /// Connection: keep-alive
+    /// ```
+    /// since connections might or might not be kept alive after a response has
+    /// been sent. **HTTP/2** does not have this limitation, since connections
+    /// must be expliticly terminated with a `GOAWAY` frame.
+    ///
+    /// # References
+    /// * [RFC 9113 - Section 8.2.2](https://httpwg.org/specs/rfc9113.html#ConnectionSpecific)
+    ConnectionSpecificHeaderField,
+
+    /// An exception to the [ConnectionSpecificHeaderField] is the `TE` header,
+    /// and it may only contain `trailers`.
+    ///
+    /// # References
+    /// * [RFC 9113 - Section 8.2.2](https://httpwg.org/specs/rfc9113.html#ConnectionSpecific)
+    TeHeaderNotTrailers,
 }
 
 impl From<DynamicTableLookupError> for DecompressionError {
@@ -286,7 +333,7 @@ impl DynamicTable {
 
         while self.current_size + entry_size > self.max_size {
             let Some((_, last_entry_size)) = self.table.pop_back() else {
-                // Table is empty, so it will never fit in the table.
+                // Table is empty, so the entry will never fit in the table.
                 return;
             };
 
@@ -815,6 +862,8 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
     let mut dynamic_table = dynamic_table.lock_owned().await;
     let mut path = None;
     let mut method = None;
+    let mut scheme = None;
+    let mut authority = None;
     let mut headers = Vec::new();
 
     let mut is_first = true;
@@ -831,21 +880,43 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
             };
 
             match dynamic_table.get(index, None)? {
-                DynamicTableEntry::Authority(_) => (),
+                DynamicTableEntry::Authority(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
+                    if authority.is_some() {
+                        return Err(DecompressionError::DuplicateAuthority);
+                    }
+                    authority = Some(val);
+                },
                 DynamicTableEntry::Header { name, value } => headers.push((name, value)),
                 DynamicTableEntry::Method(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
                     if method.is_some() {
                         return Err(DecompressionError::DuplicateMethod);
                     }
                     method = Some(val);
                 }
                 DynamicTableEntry::Path(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
                     if path.is_some() {
                         return Err(DecompressionError::DuplicatePath);
                     }
                     path = Some(val.as_ref().to_string());
                 }
-                DynamicTableEntry::Scheme(_) => (),
+                DynamicTableEntry::Scheme(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
+                    if scheme.is_some() {
+                        return Err(DecompressionError::DuplicateScheme);
+                    }
+                    scheme = Some(val);
+                },
             }
             continue;
         }
@@ -855,8 +926,13 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
             // Literal Header Field with Incremental Indexing — New Name
             if first_octet == 0x40 {
                 let name = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+                validate_header_name(&name)?;
+
                 let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+                validate_header_value(&value)?;
+
                 let header = (HeaderName::from(name), HeaderValue::from(value));
+                validate_header(&header)?;
                 dynamic_table.insert(DynamicTableEntry::Header { name: header.0.clone(), value: header.1.clone() });
                 headers.push(header);
                 continue;
@@ -869,15 +945,25 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
 
             let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
             match dynamic_table.get(index, Some(value))? {
-                DynamicTableEntry::Authority(authority) => {
-                    dynamic_table.insert(DynamicTableEntry::Authority(authority));
-                }
+                DynamicTableEntry::Authority(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
+                    if authority.is_some() {
+                        return Err(DecompressionError::DuplicateAuthority);
+                    }
+                    dynamic_table.insert(DynamicTableEntry::Authority(val.clone()));
+                    authority = Some(val);
+                },
                 DynamicTableEntry::Header { name, value } => {
                     let header = (HeaderName::from(name), HeaderValue::from(value));
                     dynamic_table.insert(DynamicTableEntry::Header { name: header.0.clone(), value: header.1.clone() });
                     headers.push(header);
                 }
                 DynamicTableEntry::Method(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
                     if method.is_some() {
                         return Err(DecompressionError::DuplicateMethod);
                     }
@@ -885,14 +971,25 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
                     method = Some(val);
                 }
                 DynamicTableEntry::Path(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
                     if path.is_some() {
                         return Err(DecompressionError::DuplicatePath);
                     }
+                    validate_path(val.as_ref())?;
                     dynamic_table.insert(DynamicTableEntry::Path(val.clone()));
                     path = Some(val.as_ref().to_string());
                 }
-                DynamicTableEntry::Scheme(scheme) => {
-                    dynamic_table.insert(DynamicTableEntry::Scheme(scheme));
+                DynamicTableEntry::Scheme(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
+                    if scheme.is_some() {
+                        return Err(DecompressionError::DuplicateScheme);
+                    }
+                    dynamic_table.insert(DynamicTableEntry::Scheme(val.clone()));
+                    scheme = Some(val);
                 }
             }
             continue;
@@ -921,8 +1018,14 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
             if first_octet == 0x10 {
                 // Literal Header Field Never Indexed — New Name
                 let name = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+                validate_header_name(&name)?;
+
                 let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
-                headers.push((HeaderName::from(name), HeaderValue::from(value)));
+                validate_header_value(&value)?;
+
+                let header = (HeaderName::from(name), HeaderValue::from(value));
+                validate_header(&header)?;
+                headers.push(header);
                 continue;
             }
 
@@ -930,26 +1033,54 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
             let Some(index) = request.read_integer(first_octet & 0x0F, 4) else {
                 return Err(DecompressionError::UnexpectedEndOfFile);
             };
+
             let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+            validate_header_value(&value)?;
+
             let entry = dynamic_table.get(index, Some(value))?;
             match entry {
-                DynamicTableEntry::Authority(_) => (),
+                DynamicTableEntry::Authority(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
+                    if authority.is_some() {
+                        return Err(DecompressionError::DuplicateAuthority);
+                    }
+                    authority = Some(val);
+                },
                 DynamicTableEntry::Header { name, value } => {
-                    headers.push((HeaderName::from(name), HeaderValue::from(value)));
+                    let header = (HeaderName::from(name), HeaderValue::from(value));
+                    validate_header(&header)?;
+                    headers.push(header);
                 }
                 DynamicTableEntry::Method(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
                     if method.is_some() {
                         return Err(DecompressionError::DuplicateMethod);
                     }
                     method = Some(val);
                 }
                 DynamicTableEntry::Path(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
+                    validate_path(val.as_ref())?;
                     if path.is_some() {
                         return Err(DecompressionError::DuplicatePath);
                     }
                     path = Some(val.as_ref().to_string());
                 }
-                DynamicTableEntry::Scheme(_) => (),
+                DynamicTableEntry::Scheme(val) => {
+                    if !headers.is_empty() {
+                        return Err(DecompressionError::PseudoAfterRegularFields);
+                    }
+                    if scheme.is_some() {
+                        return Err(DecompressionError::DuplicateScheme);
+                    }
+                    scheme = Some(val);
+                }
             }
             continue;
         }
@@ -960,8 +1091,15 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
         // Literal Header Field without Indexing — New Name
         if first_octet == 0 {
             let name = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+            validate_header_name(&name)?;
+
             let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
-            headers.push((HeaderName::from(name), HeaderValue::from(value)));
+            validate_header_value(&value)?;
+
+            let header = (HeaderName::from(name), HeaderValue::from(value));
+            validate_header(&header)?;
+
+            headers.push(header);
             continue;
         }
 
@@ -971,26 +1109,53 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
         };
 
         let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+        validate_header_value(&value)?;
+
         let entry = dynamic_table.get(index, Some(value))?;
         match entry {
-            DynamicTableEntry::Authority(_) => (),
+            DynamicTableEntry::Authority(val) => {
+                if !headers.is_empty() {
+                    return Err(DecompressionError::PseudoAfterRegularFields);
+                }
+                if authority.is_some() {
+                    return Err(DecompressionError::DuplicateAuthority);
+                }
+                authority = Some(val);
+            },
             DynamicTableEntry::Header { name, value } => {
                 let header = (HeaderName::from(name), HeaderValue::from(value));
+                validate_header(&header)?;
                 headers.push(header);
             }
             DynamicTableEntry::Method(val) => {
+                if !headers.is_empty() {
+                    return Err(DecompressionError::PseudoAfterRegularFields);
+                }
                 if method.is_some() {
                     return Err(DecompressionError::DuplicateMethod);
                 }
                 method = Some(val);
             }
             DynamicTableEntry::Path(val) => {
+                if !headers.is_empty() {
+                    return Err(DecompressionError::PseudoAfterRegularFields);
+                }
+                validate_path(val.as_ref())?;
                 if path.is_some() {
                     return Err(DecompressionError::DuplicatePath);
                 }
                 path = Some(val.as_ref().to_string());
             }
-            DynamicTableEntry::Scheme(_) => (),
+            DynamicTableEntry::Scheme(val) => {
+                if !headers.is_empty() {
+                    return Err(DecompressionError::PseudoAfterRegularFields);
+                }
+                if scheme.is_some() {
+                    return Err(DecompressionError::DuplicateScheme);
+                }
+                dynamic_table.insert(DynamicTableEntry::Scheme(val.clone()));
+                scheme = Some(val);
+            }
         }
     }
 
@@ -1001,6 +1166,10 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
     let Some(method) = method else {
         return Err(DecompressionError::NoMethod);
     };
+
+    if !scheme.is_some() && method != Method::Connect {
+        return Err(DecompressionError::NoScheme);
+    }
 
     Ok(Request {
         method,
@@ -1196,6 +1365,93 @@ pub(super) fn decode_huffman(input: &[u8]) -> Option<String> {
     }
 
     Some(String::from_utf8(output).unwrap()) // TODO propagate errors correcty
+}
+
+/// Validate the header names for applicability, governed by
+/// [RFC 9113 Section 8.2.2](https://httpwg.org/specs/rfc9113.html#rfc.section.8.2.2)
+///
+/// # References
+/// * [RFC 9113 Section 8.2.2](https://httpwg.org/specs/rfc9113.html#rfc.section.8.2.2)
+fn validate_header(header: &(HeaderName, HeaderValue)) -> Result<(), DecompressionError> {
+    let (name, value) = header;
+
+    // 8.2.2. Connection-Specific Header Fields
+    match name {
+        HeaderName::Connection | HeaderName::KeepAlive |
+        HeaderName::ProxyConnection | HeaderName::TransferEncoding |
+        HeaderName::Upgrade => return Err(DecompressionError::ConnectionSpecificHeaderField),
+        HeaderName::TE => {
+            if value.as_str_no_convert() != Some("trailers") {
+                return Err(DecompressionError::TeHeaderNotTrailers);
+            }
+        }
+        _ => ()
+    }
+
+    Ok(())
+}
+
+/// Validate the header names for non-indexed headers, governed by
+/// [RFC 9113 Section 8.2](https://httpwg.org/specs/rfc9113.html#rfc.section.8.2)
+///
+/// # References
+/// * [RFC 9113 Section 8.2](https://httpwg.org/specs/rfc9113.html#rfc.section.8.2)
+fn validate_header_name(name: &str) -> Result<(), DecompressionError> {
+    if name.len() == 0 {
+        return Err(DecompressionError::FieldNameEmpty);
+    }
+
+    if name.starts_with(':') && name != ":protocol" {
+        return Err(DecompressionError::FieldNameStartWithColonNonPseudoField);
+    }
+
+    for c in name.bytes() {
+        match c {
+            0x00..=0x19 => return Err(DecompressionError::FieldNameInvalidNonVisibleAscii),
+            0x20 => return Err(DecompressionError::FieldNameInvalidAsciiSpace),
+            0x41..=0x5a => return Err(DecompressionError::FieldNameInvalidUppercase),
+            0x7f..=0xff => return Err(DecompressionError::FieldNameExtendedAsciiUnicode),
+            _ => (),
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate the header values for non-indexed headers, governed by
+/// [RFC 9113 Section 8.2](https://httpwg.org/specs/rfc9113.html#rfc.section.8.2)
+///
+/// # References
+/// * [RFC 9113 Section 8.2](https://httpwg.org/specs/rfc9113.html#rfc.section.8.2)
+fn validate_header_value(value: &str) -> Result<(), DecompressionError> {
+    if value.starts_with(' ') || value.starts_with('\t') {
+        return Err(DecompressionError::FieldValueStartsWithWhitespace);
+    }
+
+    if value.ends_with(' ') || value.ends_with('\t') {
+        return Err(DecompressionError::FieldValueEndsWithWhitespace);
+    }
+
+    for c in value.bytes() {
+        match c {
+            0x00 => return Err(DecompressionError::FieldValueContainsNul),
+            0x0a => return Err(DecompressionError::FieldValueContainsLineFeed),
+            0x0d => return Err(DecompressionError::FieldValueContainsCarriageReturn),
+            _ => (),
+        }
+    }
+
+    Ok(())
+}
+
+/// # References
+/// * [RFC 9113 - Section 8.3.1](https://httpwg.org/specs/rfc9113.html#rfc.section.8.3.1)
+fn validate_path(value: &str) -> Result<(), DecompressionError> {
+    if value.is_empty() {
+        return Err(DecompressionError::EmptyPath);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1505,5 +1761,24 @@ mod tests {
         let mut buf = Vec::new();
         buf.write_hpack_number(input, n, prefix).unwrap();
         assert_eq!(buf.as_slice(), expected);
+    }
+
+    #[rstest]
+    #[case((HeaderName::Connection, "keep-alive".into()), Err(DecompressionError::ConnectionSpecificHeaderField))]
+    #[case((HeaderName::Connection, "close".into()), Err(DecompressionError::ConnectionSpecificHeaderField))]
+    #[case((HeaderName::Connection, "some-non-standard-token".into()), Err(DecompressionError::ConnectionSpecificHeaderField))]
+    #[case((HeaderName::ProxyConnection, "close".into()), Err(DecompressionError::ConnectionSpecificHeaderField))]
+    #[case((HeaderName::ProxyConnection, "keep-alive".into()), Err(DecompressionError::ConnectionSpecificHeaderField))]
+    #[case((HeaderName::ProxyConnection, "some-non-standard-token".into()), Err(DecompressionError::ConnectionSpecificHeaderField))]
+    #[case((HeaderName::TE, "trailers".into()), Ok(()))]
+    #[case((HeaderName::TE, "some-non-standard-token".into()), Err(DecompressionError::TeHeaderNotTrailers))]
+    #[case((HeaderName::TE, "compress".into()), Err(DecompressionError::TeHeaderNotTrailers))]
+    #[case((HeaderName::TE, "deflate".into()), Err(DecompressionError::TeHeaderNotTrailers))]
+    #[case((HeaderName::TE, "trailers, compress".into()), Err(DecompressionError::TeHeaderNotTrailers))]
+    #[case((HeaderName::TE, "compress, trailers".into()), Err(DecompressionError::TeHeaderNotTrailers))]
+    #[case((HeaderName::TE, "gzip".into()), Err(DecompressionError::TeHeaderNotTrailers))]
+    #[test]
+    fn test_validate_header(#[case] header: (HeaderName, HeaderValue), #[case] expected_result: Result<(), DecompressionError>) {
+        assert_eq!(validate_header(&header), expected_result);
     }
 }

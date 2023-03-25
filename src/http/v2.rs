@@ -23,7 +23,7 @@ use crate::ServenteConfig;
 
 use self::hpack::DynamicTable;
 
-use super::message::{Response, Request};
+use super::message::{Response, Request, HeaderName};
 
 mod bits;
 mod hpack;
