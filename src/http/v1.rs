@@ -183,8 +183,8 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
     };
 
     match body {
-        BodyKind::File(file) => {
-            let file_size = file.metadata().await.unwrap().len();
+        BodyKind::File { metadata, .. } => {
+            let file_size = metadata.len();
             if let Some(ranges) = ranges {
                 response.status = StatusCode::PartialContent;
                 if let Some(range) = ranges.first_and_only() {
@@ -318,8 +318,7 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
     let mut response = handle_request(&request, config).await;
     finish_response_normal(&request, &mut response).await;
 
-    if let Some(BodyKind::File(file)) = &response.body {
-        let metadata = file.metadata().await?;
+    if let Some(BodyKind::File { metadata, .. }) = &response.body {
         if !metadata.is_file() {
             let mut response = Response::with_status(StatusCode::InternalServerError);
 
@@ -541,6 +540,8 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         let name = name.trim().to_string();
         let value = value.trim().to_string();
 
+        super::validate_token(&name)?;
+
         let name = HeaderName::from(name);
         if let HeaderName::Other(name) = &name {
             #[cfg(debug_assertions)]
@@ -739,12 +740,12 @@ async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option
     let start = Instant::now();
     if let Some(body) = response.body {
         match body {
-            BodyKind::File(mut response) => {
+            BodyKind::File { mut handle, .. } => {
                 match transfer_strategy {
-                    TransferStrategy::Full => transfer_body_full(stream, &mut response).await?,
-                    TransferStrategy::Chunked => transfer_body_chunked(stream, &mut response).await?,
+                    TransferStrategy::Full => transfer_body_full(stream, &mut handle).await?,
+                    TransferStrategy::Chunked => transfer_body_chunked(stream, &mut handle).await?,
                     TransferStrategy::Ranges { ranges } => {
-                        transfer_body_ranges(stream, &mut response, ranges).await?
+                        transfer_body_ranges(stream, &mut handle, ranges).await?
                     }
                 }
             }
@@ -965,5 +966,17 @@ mod tests {
             Error::ParseError(HttpParseError::MethodTooLarge) => {},
             _ => panic!("Unexpected error: {:?}", error),
         }
+    }
+
+    #[rstest]
+    #[case("Connection: \rkeep-alive", HttpParseError::InvalidCRLF)]
+    #[case("Connection keep-alive", HttpParseError::HeaderDoesNotContainColon)]
+    #[case("Connection keep-alive", HttpParseError::HeaderDoesNotContainColon)]
+    #[tokio::test]
+    async fn read_headers_name_validation(#[case] line: &str, #[case] expected: HttpParseError) {
+        let mut stream = std::io::Cursor::new(format!("{}\r\n\r\n", line));
+        let headers = super::read_headers(&mut stream).await;
+        assert!(headers.is_err());
+        assert!(matches!(headers.err().unwrap(), Error::ParseError(e) if e == expected));
     }
 }
