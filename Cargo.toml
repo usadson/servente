@@ -1,47 +1,8 @@
-[package]
-name = "servente"
-version = "0.2.0"
-edition = "2021"
+[workspace]
 
-[dependencies]
-anyhow = "*"
-brotli = { version = "*", default-features = false, features = ["std"] }
-flate2 = "*"
-futures = "*"
-hashbrown = "*"
-httpdate = "*"
-lazy_static = "*"
-rcgen = "*"
-rstest = "*"
-rustls = { version = "*", features = ["quic", "secret_extraction"] }
-rustls-pemfile = "*"
-stretto = { version = "*", features = ["async"] }
-strum = "*"
-strum_macros = "*"
-tokio = { version = "*", features = ["full"] }
-tokio-rustls = "*"
-phf = { version = "*", features = ["macros", "unicase"] }
-unicase = "*"
-urlencoding = "*"
-
-
-# Optional dependencies
-scraper = { version = "*", optional = true }
-notify = { version = "*", optional = true }
-quinn = { version = "*", features = ["rustls"], optional = true }
-ktls = { version = "*", optional = true }
-
-[features]
-default = ["analysis", "watch", "http2"]
-
-analysis = ["dep:scraper"]
-debugging = []
-ktls = ["dep:ktls"]
-http2 = []
-http3 = ["dep:quinn"]
-
-# Watch for changes in the filesystem
-watch = ["dep:notify"]
+members = [
+    "servente"
+]
 
 [profile.release]
 opt-level = 3
