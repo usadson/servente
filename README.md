@@ -1,9 +1,11 @@
 # 🚀 Servente
+[<img alt="GitHub Actions build status" src="https://img.shields.io/github/actions/workflow/status/usadson/servente/rust.yml?logo=Github-Actions&style=for-the-badge" height="22">](https://github.com/usadson/servente/actions/)
+[<img alt="Travis CI build status" src="https://img.shields.io/github/actions/workflow/status/usadson/servente/rust.yml?logo=travis&style=for-the-badge" height="22">](https://app.travis-ci.com/github/usadson/servente)
+
 A web server designed for hosting static files and serves as a valuable tool for
 testing new ideas, features, and specifications. Despite its focus on
 experimentation, the server remains highly performant, delivering
 ⚡ lightning-fast speeds that allow for seamless content delivery.
-
 
 ## 💡 Feature Support Table
 | Feature                   | Status | Description                                              | Notes                                                                                                 |
