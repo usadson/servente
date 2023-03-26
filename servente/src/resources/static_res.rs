@@ -12,7 +12,7 @@
 ///
 /// `CARGO_MANIFEST_DIR` will return `[repository]/servente/` so `..` will
 /// get the workspace directory.
-const RESOURCES_DIRECTORY &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../resources/");
+const RESOURCES_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../resources/");
 
 /// The HTML page that is shown when the user visits the root of the
 /// application, without having overridden the default welcome page.
