@@ -46,8 +46,8 @@ const FRAME_TYPE_PING: u8 = 0x06;
 const FRAME_TYPE_GOAWAY: u8 = 0x07;
 const FRAME_TYPE_WINDOW_UPDATE: u8 = 0x08;
 const FRAME_TYPE_CONTINUATION: u8 = 0x09;
-const FRAME_TYPE_ALTSVC: u8 = 0x0a;
-const FRAME_TYPE_ORIGIN: u8 = 0x0c;
+// const FRAME_TYPE_ALTSVC: u8 = 0x0a;
+// const FRAME_TYPE_ORIGIN: u8 = 0x0c;
 
 
 const MAXIMUM_ALLOWED_FRAME_SIZE: u32 = 0x00FF_FFFF;
@@ -918,15 +918,35 @@ struct Stream {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StreamId(pub u32);
 
+/// Defines the state of a stream, and it transitioned from according to the
+/// rules of HTTP/2.
+///
+/// # References
+/// * [RFC 9113 Section 5](https://httpwg.org/specs/rfc9113.html#StreamsLayer)
 enum StreamState {
+    /// The initial state of a stream, before any frames have been sent or
+    /// received.
+    #[allow(dead_code)]
     Idle,
+
+    #[cfg(feature = "server_push")]
     ReservedLocal,
-    ReservedRemote,
+
+    /// The state of a stream when a HEADERS frame has been received, and
+    /// before the END_STREAM flag has been received.
     Open{
         request: Option<BinaryRequest>,
     },
+
+    #[cfg(feature = "server_push")]
     HalfClosedLocal,
+
+    /// The state of a stream when the client has sent its HEADERS and
+    /// optionally DATA frames, before the server has sent its HEADERS
+    /// and DATA frames.
     HalfClosedRemote,
+
+    /// The state of a stream when the a request has been fully processed.
     Closed,
 }
 
@@ -934,9 +954,10 @@ impl Debug for StreamState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Idle => f.write_str("Idle"),
+            #[cfg(feature = "server_push")]
             Self::ReservedLocal => f.write_str("ReservedLocal"),
-            Self::ReservedRemote => f.write_str("ReservedRemote"),
             Self::Open { .. } => f.write_str("Open"),
+            #[cfg(feature = "server_push")]
             Self::HalfClosedLocal => f.write_str("HalfClosedLocal"),
             Self::HalfClosedRemote => f.write_str("HalfClosedRemote"),
             Self::Closed => f.write_str("Closed"),
@@ -945,15 +966,17 @@ impl Debug for StreamState {
 }
 
 impl StreamState {
+    /// The client may send HEADERS frames in this state.
     pub fn client_may_send_headers(&self) -> bool {
         match self {
             Self::Idle => true,
             Self::Open { .. } => true,
-            Self::HalfClosedLocal => true,
+            // half-closed (local) is not applicable for clients
             _ => false,
         }
     }
 
+    /// The client may send WINDOW_UPDATE frames in this state.
     pub fn client_may_send_window_update(&self) -> bool {
         match self {
             Self::Idle => false,
@@ -962,6 +985,8 @@ impl StreamState {
         }
     }
 
+    /// When a stream has a unprocessed and unparsed request, this method
+    /// returns it.
     pub fn into_request(self) -> Option<BinaryRequest> {
         if let StreamState::Open { request } = self {
             request
