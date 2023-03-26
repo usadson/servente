@@ -1,7 +1,8 @@
 [workspace]
 
 members = [
-    "servente"
+    "servente",
+    "servente_generator",
 ]
 
 [profile.release]

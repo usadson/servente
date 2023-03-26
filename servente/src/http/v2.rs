@@ -561,7 +561,7 @@ impl Connection {
         response.headers.set(HeaderName::ContentLength, content_length.into());
 
         let payload = self.header_compressor.compress(&response);
-        self.send_frame(Frame::Headers { end_headers: true, end_stream: response.body.is_none(), stream_id, payload }).await?;
+        self.send_frame(Frame::Headers { end_headers: true, end_stream: content_length == 0, stream_id, payload }).await?;
 
         if let Some(body) = response.body {
             match body {

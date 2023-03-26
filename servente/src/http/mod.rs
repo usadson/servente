@@ -342,7 +342,15 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
         return None
     };
 
-    if let Some(modified_date) = cached.value().modified_date {
+    let cached = match &cached.value().cache_details {
+        Some(details) => match details {
+            CachedFileDetails::Markdown { html_rendered } => Arc::clone(html_rendered),
+            _ => Arc::clone(cached.value()),
+        }
+        None => Arc::clone(cached.value())
+    };
+
+    if let Some(modified_date) = cached.modified_date {
         if let Some(not_modified_response) = check_not_modified(request, path, modified_date) {
             return Some(not_modified_response);
         }
@@ -352,7 +360,7 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
 
     let encoding = if let Some(accept_encoding) = request.headers.get(&HeaderName::AcceptEncoding) {
         if let Some(accept_encoding) = accept_encoding.as_str_no_convert() {
-            cached.value().determine_best_version_from_accept_encoding(accept_encoding)
+            cached.determine_best_version_from_accept_encoding(accept_encoding)
         } else {
             None
         }
@@ -364,18 +372,24 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
         response.headers.set(HeaderName::ContentEncoding, encoding.into());
     }
 
-    response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+    if let Some(media_type) = cached.media_type.clone() {
+        response.headers.set(HeaderName::ContentType, HeaderValue::from(media_type));
+    } else {
+        response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+    }
+
     response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
-    response.body = Some(BodyKind::CachedBytes(Arc::clone(cached.value()), encoding));
-    if let Some(modified_date) = cached.value().modified_date {
+    if let Some(modified_date) = cached.modified_date {
         response.headers.set_last_modified(modified_date);
     }
 
-    if let Some(CachedFileDetails::Document { link_preloads }) = &cached.value().cache_details{
+    if let Some(CachedFileDetails::Document { link_preloads }) = &cached.cache_details{
         for link_preload in link_preloads {
             response.headers.append_possible_duplicate(HeaderName::Link, link_preload.clone().into());
         }
     }
+
+    response.body = Some(BodyKind::CachedBytes(cached, encoding));
 
     return Some(response);
 }

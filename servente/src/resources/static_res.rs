@@ -5,19 +5,18 @@
 //! application. These resources are embedded into the binary using the
 //! `include!` macros.
 
-/// The path to the `/resources` directory in the repository root.
-///
-/// There isn't an environment variable like `CARGO_WORKSPACE_DIR` yet, so
-/// we resort to using relative paths instead.
-///
-/// `CARGO_MANIFEST_DIR` will return `[repository]/servente/` so `..` will
-/// get the workspace directory.
-const RESOURCES_DIRECTORY: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../resources/");
+// The path to the `/resources` directory in the repository root.
+//
+// There isn't an environment variable like `CARGO_WORKSPACE_DIR` yet, so
+// we resort to using relative paths instead.
+//
+// `CARGO_MANIFEST_DIR` will return `[repository]/servente/` so `..` will
+// get the workspace directory.
 
 /// The HTML page that is shown when the user visits the root of the
 /// application, without having overridden the default welcome page.
-pub const WELCOME_HTML: &str = include_str!(concat!(RESOURCES_DIRECTORY, "welcome.html"));
+pub const WELCOME_HTML: &str = include_str!(concat!(concat!(env!("CARGO_MANIFEST_DIR"), "/../resources/"), "welcome.html"));
 
 /// The HTML page that is shown when the user visits the root of the
 /// application, without having overridden the default welcome page.
-pub const WELCOME_HTML_NL: &str = include_str!(concat!(RESOURCES_DIRECTORY, "welcome.nl.html"));
+pub const WELCOME_HTML_NL: &str = include_str!(concat!(concat!(env!("CARGO_MANIFEST_DIR"), "/../resources/"), "welcome.nl.html"));

@@ -3,6 +3,8 @@
 
 use std::{io::Write, fmt::Formatter, time::SystemTime};
 
+use super::MediaType;
+
 /// A list of supported content encodings.
 ///
 /// ## About
@@ -64,10 +66,14 @@ impl ContentCoding {
 
 /// A struct that contains multiple encoded/compressed versions of the same
 /// resource.
+///
+/// TODO: name this structure better, since it doesn't reflect the contents
+///       anymore
 #[derive(Default)]
 pub struct ContentEncodedVersions {
     pub modified_date: Option<SystemTime>,
     pub cache_details: Option<super::cache::CachedFileDetails>,
+    pub media_type: Option<MediaType>,
 
     /// The uncompressed version of the resource.
     pub uncompressed: Vec<u8>,

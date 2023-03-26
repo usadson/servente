@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Added roadmap describing upcoming features and changes
+- Markdown to HTML renderer/converter
+
+### Changed
+- Restructure repository for multi-crate config (Cargo workspace)
+
 ## [0.2.0](https://github.com/usadson/servente/releases/tag/v0.2.0) - 2023-03-26
 Beta build with support for HTTP/2 and caching.
 

@@ -47,6 +47,7 @@ lazy_static! {
 ///
 /// It provides extra information that can be used as hints by the server for
 /// the client to optimise the loading of certain files.
+#[derive(Clone, Debug)]
 pub enum CachedFileDetails {
     /// `None` is specified for files that don't contain extra metadata or hints
     /// for the server.
@@ -60,6 +61,11 @@ pub enum CachedFileDetails {
         /// header.
         link_preloads: Vec<String>,
     },
+
+    #[cfg(feature = "convert-markdown")]
+    Markdown {
+        html_rendered: Arc<ContentEncodedVersions>,
+    }
 }
 
 /// Until this gets stabilized:
@@ -150,13 +156,17 @@ pub async fn maybe_cache_file(path: &Path) {
             let mut cached = ContentEncodedVersions::create(data);
             cached.modified_date = modified_date;
 
+            // If the infrastructure around FILE_CACHE_CHECK_FILE_EXISTENCE
+            // changes, `the arc_unwrap_or_clone` might be useful.
+            let path_string = path_buf_to_string(arc_unwrap_or_clone(path.clone()));
+
+            #[cfg(feature = "convert-markdown")]
+            maybe_convert_markdown_htmlized(&path_string, &mut cached).await;
+
             // try_insert_with_ttl doesn't panic, so it's safer.
             // If due to an unfortunate event the file is cached twice, it's
             // not a big deal.
-            //
-            // If the infrastructure around FILE_CACHE_CHECK_FILE_EXISTENCE
-            // changes, `the arc_unwrap_or_clone` might be useful.
-            _ = FILE_CACHE.try_insert_with_ttl(path_buf_to_string(arc_unwrap_or_clone(path.clone())), Arc::new(cached), 0, DEFAULT_CACHE_DURATION).await;
+            _ = FILE_CACHE.try_insert_with_ttl(path_string, Arc::new(cached), 0, DEFAULT_CACHE_DURATION).await;
 
             // The file is cached, so another task may cache it again if
             // appropriately.
@@ -165,6 +175,25 @@ pub async fn maybe_cache_file(path: &Path) {
             println!("Cached file: {} in {} seconds", path.to_string_lossy(), (start.elapsed()).as_secs_f32());
         }
     });
+}
+
+/// Convert the file to HTML if it is a Markdown file.
+#[cfg(feature = "convert-markdown")]
+async fn maybe_convert_markdown_htmlized(path: &str, cached: &mut ContentEncodedVersions) {
+    if cached.cache_details.is_some() {
+        return;
+    }
+
+    if path.ends_with(".md") {
+        let htmlized = servente_generator::common_mark::convert_to_html(String::from_utf8_lossy(cached.uncompressed.as_slice()).as_ref());
+
+        let mut data = ContentEncodedVersions::create(htmlized.into());
+        data.media_type = Some(crate::resources::MediaType::HTML);
+
+        cached.cache_details = Some(CachedFileDetails::Markdown {
+             html_rendered: Arc::new(data)
+        });
+    }
 }
 
 /// Converts a `PathBuf` to a `String`, trying without allocating.

@@ -31,14 +31,18 @@ notify = { version = "*", optional = true }
 quinn = { version = "*", features = ["rustls"], optional = true }
 ktls = { version = "*", optional = true }
 
+servente_generator = { version = "*", path = "../servente_generator", default-features = false }
+
 [features]
-default = ["analysis", "watch", "http2"]
+default = ["analysis", "watch", "http2", "convert-markdown"]
 
 analysis = ["dep:scraper"]
 debugging = []
 ktls = ["dep:ktls"]
 http2 = []
 http3 = ["dep:quinn"]
+
+convert-markdown = ["servente_generator/markdown"]
 
 # Watch for changes in the filesystem
 watch = ["dep:notify"]

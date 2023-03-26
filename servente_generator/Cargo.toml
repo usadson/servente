@@ -1,0 +1,11 @@
+[package]
+name = "servente_generator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex = "*"
+
+[features]
+default = ["markdown"]
+markdown = []
