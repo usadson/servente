@@ -189,6 +189,7 @@ async fn maybe_convert_markdown_htmlized(path: &str, cached: &mut ContentEncoded
 
         let mut data = ContentEncodedVersions::create(htmlized.into());
         data.media_type = Some(crate::resources::MediaType::HTML);
+        data.modified_date = cached.modified_date;
 
         cached.cache_details = Some(CachedFileDetails::Markdown {
              html_rendered: Arc::new(data)
