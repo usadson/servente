@@ -117,7 +117,13 @@ async fn finish_response_general(response: &mut Response) {
     }
 
     response.headers.set(HeaderName::Server, HeaderValue::from("servente"));
+
+    #[cfg(all(feature = "http2", not(feature = "http3")))]
+    response.headers.set(HeaderName::AltSvc, HeaderValue::from("h2=\":8080\""));
+
+    #[cfg(all(feature = "http2", feature = "http3"))]
     response.headers.set(HeaderName::AltSvc, HeaderValue::from("h2=\":8080\", h3=\":8080\""));
+
     response.headers.set(HeaderName::XFrameOptions, "DENY".into());
     response.headers.set(HeaderName::XXSSProtection, "X-XSS-Protection: 1; mode=block".into());
     response.headers.set(HeaderName::XContentTypeOptions, "nosniff".into());
