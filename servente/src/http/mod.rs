@@ -154,6 +154,40 @@ pub async fn finish_response_normal(request: &Request, response: &mut Response) 
     finish_response_general(response).await
 }
 
+/// Handle an OPTIONS request.
+///
+/// This request queries the capabilities of the server, or of a specific
+/// target-resource.
+///
+/// # References
+/// * [RFC 9110 Section 9.3.7](https://www.rfc-editor.org/rfc/rfc9110.html#name-options)
+async fn handle_options(request: &Request, config: &ServenteConfig) -> Response {
+    if request.target == RequestTarget::Asterisk {
+        return handle_options_asterisk();
+    }
+
+    if let Some(response) = config.handler_controller.check_handle_options(request) {
+        return response;
+    }
+
+    // TODO: support static resources.
+    // if let RequestTarget::Origin { path, .. } = &request.target {
+    //
+    // }
+
+    Response::not_found("Not Found")
+}
+
+/// Handle an `OPTIONS` request for the '*' resource, meaning the global
+/// capabilities of the server.
+fn handle_options_asterisk() -> Response {
+    let mut response = Response::with_status(StatusCode::Ok);
+    response.headers.set(HeaderName::Allow, "GET, HEAD, OPTIONS, POST".into());
+    response.headers.set(HeaderName::Allow, "GET, HEAD".into());
+    response.headers.set_content_length(0);
+    return response;
+}
+
 /// Handles a `HttpParseError`.
 ///
 /// Servers SHOULD explain the error to the client, but this might be a security
@@ -169,6 +203,15 @@ pub async fn handle_parse_error(error: HttpParseError) -> Response {
 
 /// Handles a request.
 pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Response {
+    if request.method == Method::Options {
+        return handle_options(request, config).await;
+    }
+
+    // Method is not OPTIONS, so a request-target of "*" is not allowed anymore.
+    if request.target == RequestTarget::Asterisk {
+        return Response::with_status_and_string_body(StatusCode::BadRequest, "Invalid Target");
+    }
+
     let controller = config.handler_controller.clone();
     if let Some(result) = controller.check_handle(request) {
         return match result {
@@ -188,7 +231,9 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Respo
     if let RequestTarget::Origin { path, .. } = &request.target {
         let request_target = path.as_str();
         if request.method != Method::Get {
-            return Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed");
+            let mut response = Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed");
+            response.headers.set(HeaderName::Allow, "GET".into());
+            return response;
         }
 
         let Ok(current_directory) = current_dir() else {

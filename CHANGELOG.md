@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Added roadmap describing upcoming features and changes
 - Markdown to HTML renderer/converter
+- Support `OPTIONS` request methods
 
 ### Changed
 - Restructure repository for multi-crate config (Cargo workspace)

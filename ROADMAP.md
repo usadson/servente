@@ -12,7 +12,7 @@ The following are goals to be executed within a couple of weeks.
 ### Features
 * Fully compliant HTTP/2 support
 * Finished HTTP/3 support
-* [`OPTIONS`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS) method to allow clients to identify the allowed mechanisms for a specific resource, and detect global server features
+* [`HEAD`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/HEAD) method to allow clients to retrieve metadata about a specific resource without retrieving its contents
 * Sandboxed server environment, even without Docker, to protect the computer even on the improbably possibility of remote code execution, kernel-based disallowal of files outside of `wwwroot`
 * Denial of Service protection for long-term connections like HTTP/1.x keep-alive, HTTP/2 and HTTP/3
 

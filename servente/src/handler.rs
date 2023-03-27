@@ -7,8 +7,10 @@ use std::{
 
 use crate::http::message::{
     Request,
-    Response, Method, StatusCode,
+    Response, Method, StatusCode, HeaderName,
 };
+
+use itertools::Itertools;
 
 type HandlerReturnType = Result<Response, anyhow::Error>;
 
@@ -65,6 +67,34 @@ impl HandlerController {
                 entry.insert(map);
             },
         }
+    }
+
+    /// If the request is referencing a resource which is a handler, returns the
+    /// capabilities of that request. Otherwise, returns `None`.
+    pub fn check_handle_options(&self, request: &Request) -> Option<Response> {
+        let Some(handler_info) = self.handlers.get(request.target.as_str()) else {
+            return None;
+        };
+
+        let mut response = Response::with_status(StatusCode::Ok);
+        response.headers.set_content_length(0);
+
+        #[allow(unstable_name_collisions)]
+        let allowed_methods: String = handler_info.keys().map(|header| header.as_string())
+            .intersperse(", ")
+            .collect();
+
+        response.headers.set(HeaderName::Allow, allowed_methods.clone().into());
+        response.headers.set(HeaderName::AccessControlAllowMethods, allowed_methods.into());
+
+        // TODO list the allowed origin here.
+        response.headers.set(HeaderName::AccessControlAllowOrigin, "localhost:8080".into());
+
+        // Read more at [resourcepolicy.fyi](https://resourcepolicy.fyi/)
+        response.headers.set(HeaderName::CrossOriginResourcePolicy, "same-site".into());
+        response.headers.set(HeaderName::Vary, "Origin".into());
+
+        Some(response)
     }
 
     // TODO support async

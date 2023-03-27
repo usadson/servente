@@ -25,7 +25,7 @@ experimentation, the server remains highly performant, delivering
 | Last-Modified Caching     | ✅     | Cache files using the modification date                  | Fully supported                                                                                       |
 | Markdown Rendering        | 🤕     | Render Markdown files to HTML                            | Experimental                                                                                          |
 | Memory Cache              | ✅     | Cache files in memory for faster access                  | Uses [`stretto`](https://docs.rs/stretto/latest/stretto/)                                             |
-| OPTIONS method            | ❌     | Detecting server and resource capabilities               | Not implemented yet                                                                                   |
+| OPTIONS method            | ✅     | Detecting server and resource capabilities               | Experimental                                                                                          |
 | TLS                       | ✅     | Transport Layer Security (HTTPS)                         | Uses [`rustls`](https://docs.rs/rustls/latest/rustls/)                                                |
 | Transfer-Encoding         | ✅     | Sending data in chunks                                   | `chunked` encoding is supported                                                                       |
 | WebSockets                | ❌     | Real-time communication between client and server        | Not implemented yet                                                                                   |
