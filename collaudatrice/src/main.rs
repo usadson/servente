@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
 
     let analysis = run_analysis(&mut config).await?;
 
-    println!("{} {}", "II:".blue(), "Indexing server");
+    println!("{} Indexing server", "II:".blue());
     // TODO
     _ = analysis;
 

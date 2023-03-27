@@ -144,10 +144,8 @@ pub async fn finish_response_normal(request: &Request, response: &mut Response) 
             response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(request.target.as_str()).clone()));
         }
 
-        if response.status.class() == StatusCodeClass::Success {
-            if !response.headers.contains(&HeaderName::CacheControl) {
-                response.headers.set(HeaderName::CacheControl, HeaderValue::from("max-age=120"));
-            }
+        if response.status.class() == StatusCodeClass::Success && !response.headers.contains(&HeaderName::CacheControl) {
+            response.headers.set(HeaderName::CacheControl, HeaderValue::from("max-age=120"));
         }
     }
 
@@ -185,7 +183,7 @@ fn handle_options_asterisk() -> Response {
     response.headers.set(HeaderName::Allow, "GET, HEAD, OPTIONS, POST".into());
     response.headers.set(HeaderName::Allow, "GET, HEAD".into());
     response.headers.set_content_length(0);
-    return response;
+    response
 }
 
 /// Handles a `HttpParseError`.
@@ -222,7 +220,7 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Respo
                 _ = e;
 
                 let mut response = Response::with_status_and_string_body(StatusCode::InternalServerError, "Internal Server Error");
-                _ = finish_response_general(&mut response).await;
+                finish_response_general(&mut response).await;
                 response
             }
         };
@@ -265,8 +263,6 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Respo
                 let path = path.join("index.html");
                 if let Ok(metadata) = std::fs::metadata(&path) {
                     if metadata.is_file() {
-                        drop(metadata);
-
                         if let Some(served_file_response) = serve_file(request, &path).await {
                             return served_file_response;
                         }
@@ -394,11 +390,8 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
     };
 
     let cached = match &cached.value().cache_details {
-        Some(details) => match details {
-            CachedFileDetails::Markdown { html_rendered } => Arc::clone(html_rendered),
-            _ => Arc::clone(cached.value()),
-        }
-        None => Arc::clone(cached.value())
+        Some(CachedFileDetails::Markdown { html_rendered }) => Arc::clone(html_rendered),
+        _ => Arc::clone(cached.value())
     };
 
     if let Some(modified_date) = cached.modified_date {
@@ -442,7 +435,7 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
 
     response.body = Some(BodyKind::CachedBytes(cached, encoding));
 
-    return Some(response);
+    Some(response)
 }
 
 /// Serve the welcome page response with a 304 Not Modified status code.

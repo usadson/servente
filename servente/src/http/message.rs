@@ -723,6 +723,7 @@ impl HeaderValue {
     }
 
     /// Get the header in string form.
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         let mut result = String::new();
         self.append_to_message(&mut result);
@@ -871,6 +872,18 @@ impl HeaderMap {
         None
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.headers.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &(HeaderName, HeaderValue)> {
+        self.headers.iter()
+    }
+
+    pub fn remove(&mut self, header_name: &HeaderName) {
+        self.headers.retain(|(name, _)| name != header_name);
+    }
+
     pub fn set(&mut self, header_name: HeaderName, value: HeaderValue) {
         for (name, existing_value) in &mut self.headers {
             if name == &header_name {
@@ -880,14 +893,6 @@ impl HeaderMap {
         }
 
         self.headers.push((header_name, value));
-    }
-
-    pub fn remove(&mut self, header_name: &HeaderName) {
-        self.headers.retain(|(name, _)| name != header_name);
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &(HeaderName, HeaderValue)> {
-        self.headers.iter()
     }
 }
 

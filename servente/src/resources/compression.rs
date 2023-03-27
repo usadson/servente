@@ -97,7 +97,7 @@ impl core::fmt::Debug for ContentEncodedVersions {
 
 /// Returns whether the given file should be compressed.
 /// We shouldn't compress images, since they are already compressed.
-fn should_compress_file(uncompressed: &Vec<u8>) -> bool {
+fn should_compress_file(uncompressed: &[u8]) -> bool {
     !uncompressed.starts_with(super::FILE_JPEG_MAGIC_NUMBER) && !uncompressed.starts_with(super::FILE_PNG_MAGIC_NUMBER)
 }
 

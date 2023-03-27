@@ -84,7 +84,7 @@ struct BinaryRequest {
 impl BinaryRequest {
     #[inline]
     pub async fn decode(self, dynamic_table: Arc<Mutex<DynamicTable>>) -> Result<Request, RequestError> {
-        hpack::decode_hpack(self, dynamic_table).await.map_err(|e| RequestError::CompressionError(e))
+        hpack::decode_hpack(self, dynamic_table).await.map_err(RequestError::CompressionError)
     }
 
     pub fn peek_u8(&self) -> Option<u8> {
@@ -297,12 +297,12 @@ impl Connection {
                 let is_padded = flags & 0x08 == 0x08;
                 let end_stream = flags & 0x01 == 0x01;
 
-                let data_start = is_padded.then_some(1).unwrap_or(0);
+                let data_start = if is_padded { 1 } else { 0 };
                 if payload_length < data_start {
                     return Err(ConnectionError::StreamError { error_code: ErrorCode::FrameSizeError, stream_id });
                 }
 
-                let padding_length = is_padded.then_some(payload[0] as u32).unwrap_or(0);
+                let padding_length = if is_padded { payload[0] as u32 } else { 0 };
                 if padding_length >= payload_length {
                     return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("Padding is greater than the full payload length") });
                 }
@@ -341,13 +341,13 @@ impl Connection {
                     self.continuation = Some(stream_id);
                 }
 
-                let padding = is_padded.then_some(1).unwrap_or(0);
-                let data_start = padding + is_priority.then_some(5).unwrap_or(0);
+                let padding = if is_padded { 1 } else { 0 };
+                let data_start = padding + if is_priority { 5 } else { 0 };
                 if payload_length < data_start {
                     return Err(ConnectionError::StreamError { error_code: ErrorCode::FrameSizeError, stream_id });
                 }
 
-                let padding_length = is_padded.then_some(payload[0] as u32).unwrap_or(0);
+                let padding_length = if is_padded { payload[0] as u32 } else { 0 };
                 if padding_length >= payload_length {
                     return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("HEADERS padding is greater than payload length") });
                 }
@@ -372,7 +372,7 @@ impl Connection {
                     return Err(ConnectionError::StreamError { error_code: ErrorCode::FrameSizeError, stream_id });
                 }
 
-                return Ok(Frame::Unknown);
+                Ok(Frame::Unknown)
             }
 
             FRAME_TYPE_RST_STREAM => {
@@ -442,7 +442,8 @@ impl Connection {
                         }
                     })
                 }
-                return Ok(Frame::Settings { settings });
+
+                Ok(Frame::Settings { settings })
             }
 
             // [RFC 9113 - Section 6.6](https://httpwg.org/specs/rfc9113.html#PUSH_PROMISE)
@@ -457,9 +458,11 @@ impl Connection {
                 if stream_id != StreamId::CONTROL {
                     return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("PING on non-control stream") });
                 }
+
                 if payload_length != 8 {
                     return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::from("PING payload length != 8") });
                 }
+
                 Ok(Frame::Ping {
                     ack: flags & 0x1 == 0x1,
                     payload: payload.try_into().unwrap(),
@@ -493,7 +496,7 @@ impl Connection {
             }
 
             FRAME_TYPE_CONTINUATION => {
-                if !self.continuation.is_some() {
+                if self.continuation.is_none() {
                     return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("CONTINUATION frame without corresponding HEADERS") });
                 }
 
@@ -574,8 +577,7 @@ impl Connection {
                 super::message::BodyKind::File{ handle, .. } => {
                     let mut file = handle;
                     let buffer_length = self.settings.maximum_payload_size.0 as _;
-                    let mut buffer = Vec::with_capacity(buffer_length);
-                    buffer.resize(buffer_length, 0);
+                    let mut buffer = vec![0, buffer_length];
                     loop {
                         let bytes_read = file.read(&mut buffer).await?;
                         if bytes_read == 0 {
@@ -900,9 +902,8 @@ impl Settings {
 
     fn apply(&mut self, settings: Vec<(SettingKind, SettingValue)>) {
         for (kind, value) in settings {
-            match kind {
-                SettingKind::MaxFrameSize => self.maximum_payload_size = value,
-                _ => ()
+            if let SettingKind::MaxFrameSize = kind {
+                self.maximum_payload_size = value;
             }
         }
     }
@@ -978,11 +979,7 @@ impl StreamState {
 
     /// The client may send WINDOW_UPDATE frames in this state.
     pub fn client_may_send_window_update(&self) -> bool {
-        match self {
-            Self::Idle => false,
-            Self::Closed => false,
-            _ => true,
-        }
+        !matches!(self, Self::Idle | Self::Closed)
     }
 
     /// When a stream has a unprocessed and unparsed request, this method
@@ -1072,7 +1069,7 @@ async fn handle_client_inner(connection: &mut Connection, concurrent_context: &m
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(3)) => {
                 if connection.pings_queued_up > 2 {
-                    connection.send_frame_with_flush(Frame::GoAway { last_stream_id: StreamId::CONTROL, error_code: ErrorCode::NoError, additional_debug_data: String::from("Bye!") }).await?;();
+                    connection.send_frame_with_flush(Frame::GoAway { last_stream_id: StreamId::CONTROL, error_code: ErrorCode::NoError, additional_debug_data: String::from("Bye!") }).await?;
                     return Err(ConnectionError::Closed);
                 }
                 connection.send_frame_with_flush(Frame::Ping { ack: false, payload: *b"servente" }).await?;

@@ -28,6 +28,7 @@ impl<'c> Converter<'c> {
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_html(&mut self) -> String {
         let mut first_heading = true;
         for line in self.input.lines() {

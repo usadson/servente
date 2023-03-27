@@ -51,7 +51,7 @@ use crate::{
 
 /// The threshold at which the response body is transferred using chunked
 /// encoding.
-const TRANSFER_ENCODING_THRESHOLD: u64 = 1000_000_000_000_000_000; // 1 MiB
+const TRANSFER_ENCODING_THRESHOLD: u64 = 1_000_000_000_000_000_000; // 1 MiB
 
 /// Indicates the maximum length of a certain HTTP entity.
 struct MaximumLength(pub usize);
@@ -173,7 +173,6 @@ async fn consume_crlf<R>(stream: &mut R) -> Result<(), Error>
 }
 
 /// Plans out the best `TransferStrategy` for the given response.
-#[must_use]
 async fn determine_transfer_strategy(response: &mut Response, ranges: Option<HttpRangeList>) -> TransferStrategy {
     let Some(body) = &response.body else {
         if response.status.class() != StatusCodeClass::Informational {
@@ -501,7 +500,6 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
 }
 
 /// Reads a line from the stream, up to the maximum length.
-#[must_use]
 async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Result<String, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut string = String::new();
@@ -523,7 +521,6 @@ async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Res
 }
 
 /// Reads the headers from the stream.
-#[must_use]
 async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut headers = Vec::new();
@@ -552,7 +549,6 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
 }
 
 /// Reads the HTTP version from the stream.
-#[must_use]
 async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut version_buffer = [0u8; 8];
@@ -568,7 +564,6 @@ async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, Error>
 
 /// Reads a string from the stream until the given character is found, or the
 /// maximum length is reached.
-#[must_use]
 async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length: MaximumLength, length_error: HttpParseError) -> Result<String, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut buffer = String::new();
@@ -602,7 +597,6 @@ async fn read_request_body<R>(stream: &mut R, request: &mut Request) -> Result<(
 }
 
 /// Reads the request-body
-#[must_use]
 async fn read_request_body_content_length<R>(stream: &mut R, request: &Request, content_length: &HeaderValue) -> Result<BodyKind, Error>
         where R: AsyncBufReadExt + Unpin {
     let content_length = content_length.parse_number().ok_or(Error::ParseError(HttpParseError::InvalidContentLength))?;
@@ -625,7 +619,6 @@ async fn read_request_body_content_length<R>(stream: &mut R, request: &Request, 
 
 /// Reads the body of a request, assuming that the body is encoded using chunked
 /// transfer encoding.
-#[must_use]
 async fn read_request_body_chunked<R>(_stream: &mut R) -> Result<BodyKind, Error>
         where R: AsyncBufReadExt + Unpin {
     // TODO: support chunked encoding
@@ -645,7 +638,6 @@ async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error
 }
 
 /// Read the request-line from the stream.
-#[must_use]
 async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), Error>
         where R: AsyncBufReadExt + Unpin {
 
@@ -666,7 +658,6 @@ async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, 
 ///
 /// ### References
 /// * [RFC 9112, Section 3.2. Request Target](https://www.rfc-editor.org/rfc/rfc9112.html#name-request-target)
-#[must_use]
 async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
         where R: AsyncBufReadExt + Unpin {
     let str = read_string_until_character(stream, b' ', MaximumLength::REQUEST_TARGET, HttpParseError::RequestTargetTooLarge).await?;
@@ -715,7 +706,6 @@ async fn send_http_upgrade(stream: &mut TcpStream) -> Result<(), io::Error> {
 }
 
 /// Send the response to the client.
-#[must_use]
 async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option<HttpRangeList>) -> Result<Duration, io::Error>
         where R: AsyncWriteExt + Unpin {
     let transfer_strategy = determine_transfer_strategy(&mut response, ranges).await;
@@ -784,7 +774,6 @@ async fn send_response<R>(stream: &mut R, mut response: Response, ranges: Option
 }
 
 /// Start the HTTPv1 server on the given address.
-#[must_use]
 pub async fn start(address: &str, config: ServenteConfig) -> io::Result<()> {
     let listener = TcpListener::bind(address).await?;
     println!("Started listening on {}", address);

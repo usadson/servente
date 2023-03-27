@@ -77,12 +77,10 @@ fn arc_unwrap_or_clone<T>(arc: Arc<T>) -> T
 
 /// Caches all the applicable files on startup.
 fn cache_files_on_startup(path: &Path) -> Result<(), std::io::Error> {
-    for path in std::fs::read_dir(path)? {
-        if let Ok(entry) = path {
-            tokio::task::spawn(async move {
-                maybe_cache_file(&entry.path()).await;
-            });
-        }
+    for entry in std::fs::read_dir(path)?.flatten() {
+        tokio::task::spawn(async move {
+            maybe_cache_file(&entry.path()).await;
+        });
     }
 
     Ok(())
@@ -105,7 +103,7 @@ fn is_file_appropriate_for_caching(metadata: &std::fs::Metadata) -> bool {
 /// races.
 fn is_file_being_cached(path: &Arc<PathBuf>) -> bool {
     let mut cache_sync = FILE_CACHE_CHECK_FILE_EXISTENCE.lock().unwrap();
-    match cache_sync.entry(Arc::clone(&path)) {
+    match cache_sync.entry(Arc::clone(path)) {
         std::collections::hash_map::Entry::Occupied(_) => {
             // File is already in the process of being cached.
             true
@@ -149,7 +147,6 @@ pub async fn maybe_cache_file(path: &Path) {
             // some filesystems.
             let modified_date = metadata.modified().ok();
             let mut data = Vec::with_capacity(metadata.len() as usize);
-            drop(metadata);
 
             _ = file.read_to_end(&mut data).await;
 

@@ -52,17 +52,17 @@ impl<T> WriteExtensions for T where T: Write {
         let first_octet_max = 2_usize.pow(n as _) - 1;
 
         if value < first_octet_max {
-            self.write(&[prefix | value as u8])?;
+            self.write_all(&[prefix | value as u8])?;
             return Ok(());
         }
 
-        self.write(&[prefix | first_octet_max as u8])?;
+        self.write_all(&[prefix | first_octet_max as u8])?;
         let mut value = value - first_octet_max;
         while value >= 128 {
-            self.write(&[value as u8 % 128 + 128])?;
+            self.write_all(&[value as u8 % 128 + 128])?;
             value /= 128;
         }
-        self.write(&[value as _])?;
+        self.write_all(&[value as _])?;
 
         Ok(())
     }
@@ -280,7 +280,7 @@ impl DynamicTable {
                     if let Some(value) = supplied_value {
                         Ok(DynamicTableEntry::Method(Method::from(value)))
                     } else {
-                        Ok(DynamicTableEntry::Method(method.clone()))
+                        Ok(DynamicTableEntry::Method(method))
                     }
                 }
                 StaticTableEntry::Path(path) => {
@@ -956,7 +956,7 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
                     authority = Some(val);
                 },
                 DynamicTableEntry::Header { name, value } => {
-                    let header = (HeaderName::from(name), HeaderValue::from(value));
+                    let header = (name, value);
                     dynamic_table.insert(DynamicTableEntry::Header { name: header.0.clone(), value: header.1.clone() });
                     headers.push(header);
                 }
@@ -1049,7 +1049,7 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
                     authority = Some(val);
                 },
                 DynamicTableEntry::Header { name, value } => {
-                    let header = (HeaderName::from(name), HeaderValue::from(value));
+                    let header = (name, value);
                     validate_header(&header)?;
                     headers.push(header);
                 }
@@ -1123,7 +1123,7 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
                 authority = Some(val);
             },
             DynamicTableEntry::Header { name, value } => {
-                let header = (HeaderName::from(name), HeaderValue::from(value));
+                let header = (name, value);
                 validate_header(&header)?;
                 headers.push(header);
             }
@@ -1167,7 +1167,7 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
         return Err(DecompressionError::NoMethod);
     };
 
-    if !scheme.is_some() && method != Method::Connect {
+    if scheme.is_none() && method != Method::Connect {
         return Err(DecompressionError::NoScheme);
     }
 
@@ -1301,7 +1301,7 @@ impl<'a> BitWriter<'a> {
     pub fn push(&mut self, value: bool) -> Result<(), std::io::Error> {
         self.current_byte |= (value as u8) << self.bit_position;
         if self.bit_position == 0 {
-            self.data.write(&[self.current_byte])?;
+            self.data.write_all(&[self.current_byte])?;
             self.current_byte = 0;
             self.bit_position = 7;
         } else {
@@ -1317,7 +1317,7 @@ impl<'a> Drop for BitWriter<'a> {
         if self.bit_position != 7 {
             // Finish the byte by padding the leftover bits.
             let finish_byte = self.current_byte | (2_u8.pow(self.bit_position as u32 + 1) - 1);
-            self.data.write(&[finish_byte]).unwrap();
+            self.data.write_all(&[finish_byte]).unwrap();
         }
     }
 }
@@ -1327,7 +1327,7 @@ pub(super) fn decode_huffman(input: &[u8]) -> Option<String> {
 
     let mut current_number = 0;
     let mut bit_length = 0;
-    for bit in BitReader::new(&input, None) {
+    for bit in BitReader::new(input, None) {
         if bit_length == 255 {
             debug_assert!(false, "Shouldn't practically be possible");
             return None;
@@ -1397,7 +1397,7 @@ fn validate_header(header: &(HeaderName, HeaderValue)) -> Result<(), Decompressi
 /// # References
 /// * [RFC 9113 Section 8.2](https://httpwg.org/specs/rfc9113.html#rfc.section.8.2)
 fn validate_header_name(name: &str) -> Result<(), DecompressionError> {
-    if name.len() == 0 {
+    if name.is_empty() {
         return Err(DecompressionError::FieldNameEmpty);
     }
 

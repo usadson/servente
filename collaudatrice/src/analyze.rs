@@ -37,7 +37,7 @@ pub async fn analyze_server(config: &Configuration) -> anyhow::Result<ServerAnal
                         analysis.ipv4_address = Some(address);
                     }
                     Err(e) => {
-                        failed_requests.push(anyhow::Error::from(e));
+                        failed_requests.push(e);
                         failed_requests.push(anyhow!("Failed to connect to {address}"));
                     }
                 }
@@ -49,7 +49,7 @@ pub async fn analyze_server(config: &Configuration) -> anyhow::Result<ServerAnal
                         analysis.ipv6_address = Some(address);
                     }
                     Err(e) => {
-                        failed_requests.push(anyhow::Error::from(e));
+                        failed_requests.push(e);
                         failed_requests.push(anyhow!("Failed to connect to {address}"));
                     }
                 }
@@ -81,7 +81,7 @@ async fn find_server_product_name(config: &Configuration, address: SocketAddr) -
             .connect(rustls::ServerName::try_from(config.args.host.as_ref())?, stream).await?;
 
 
-    connection.write(
+    connection.write_all(
         format!(
             concat!(
                 "GET / HTTP/1.1\r\n",
@@ -107,8 +107,8 @@ async fn find_server_product_name(config: &Configuration, address: SocketAddr) -
 
     for line in data {
         let header_start = "Server: ";
-        if line.starts_with(header_start) {
-            return Ok(line[header_start.len()..].to_owned());
+        if let Some(value) = line.strip_prefix(header_start) {
+            return Ok(value.to_owned());
         }
     }
 
