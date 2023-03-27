@@ -67,6 +67,13 @@ Contributions to Servente are welcome! If you find a bug or have a feature
 request, please open an issue on GitHub. If you would like to contribute code,
 please fork the repository and submit a pull request.
 
+## 🔍 Documentation
+The code is documented in-source, but for non-code information, you can read
+more here:
+* [Possible Security Flaws](docs/Security.md)
+* [Quick-and-dirty Benchmarks](docs/Benchmark.md)
+* [Sandboxing Research](docs/Sandboxing.md)
+
 ## 📚 Quick Links
 * [RFC 7541: HPACK Header Compression for HTTP/2](https://httpwg.org/specs/rfc7541.html)
 * [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
