@@ -1,0 +1,15 @@
+[package]
+name = "collaudatrice"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "*", features = ["backtrace"]}
+clap = { version = "*", features = ["derive"] }
+crossbeam-deque = "*"
+crossbeam-queue = "*"
+owo-colors = "*"
+rustls = { version = "*", features = ["dangerous_configuration"] }
+rustls-native-certs = "*"
+tokio = { version = "*", features = ["full"] }
+tokio-rustls = "*"

@@ -6,14 +6,16 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Added roadmap describing upcoming features and changes
 - Markdown to HTML renderer/converter
-- Support `OPTIONS` request methods
+- Support **`OPTIONS`** request methods
+- **Collaudatrice**, a tester for HTTP compliance and other web and
+  webserver-related conformance and best practices.
 
 ### Changed
 - Restructure repository for multi-crate config (Cargo workspace)
 
 ### Fixed
-- ALPN and `Alt-Svc` weren't based on feature detection, so for example HTTP/2
-  would be listed on there, but wouldn't actually be available.
+- **ALPN** and **`Alt-Svc`** weren't based on feature detection, so for example
+  HTTP/2 would be listed on there, but wouldn't actually be available.
 
 ## [0.2.0](https://github.com/usadson/servente/releases/tag/v0.2.0) - 2023-03-26
 Beta build with support for HTTP/2 and caching.

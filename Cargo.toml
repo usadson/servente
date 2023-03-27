@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "collaudatrice",
     "servente",
     "servente_generator",
 ]
