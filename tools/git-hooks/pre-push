@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# This option prints the commands when they're invoked which enables
+# transparency, even when the script source isn't directly read.
+set -o xtrace
+
+cargo clippy --all-targets
