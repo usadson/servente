@@ -41,6 +41,7 @@ use self::{
 pub mod error;
 pub mod hints;
 pub mod message;
+mod syntax;
 pub mod v1;
 
 #[cfg(feature = "http2")]
@@ -452,42 +453,4 @@ fn serve_welcome_page_not_modified(request: &Request) -> Response {
     }
 
     response
-}
-
-fn validate_token(value: &str) -> Result<(), HttpParseError> {
-    if value.is_empty() {
-        return Err(HttpParseError::TokenEmpty);
-    }
-
-    for character in value.bytes() {
-        validate_token_character(character)?;
-    }
-
-    Ok(())
-}
-
-/// Validate a token character.
-///
-/// ```text
-/// tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
-///                / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
-///                / DIGIT / ALPHA
-///                ; any VCHAR, except delimiters
-/// ```
-fn validate_token_character(character: u8) -> Result<(), HttpParseError> {
-    match character {
-        b' ' | b'\t' => Err(HttpParseError::TokenContainsWhitespace),
-
-        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' |
-        b'^' | b'_' | b'`' | b'|' | b'~' => Ok(()),
-
-        b'0'..=b'9' => Ok(()),
-        b'A'..=b'Z' => Ok(()),
-        b'a'..=b'z' => Ok(()),
-
-        b'"' | b'(' | b')' | b',' | b'/' | b':' | b';' | b'<' | b'=' | b'>' |
-        b'?' | b'@' | b'[' | b'\\' | b']' | b'{' | b'}' => Err(HttpParseError::TokenContainsDelimiter),
-
-        _ => Err(HttpParseError::TokenContainsNonVisibleAscii),
-    }
 }

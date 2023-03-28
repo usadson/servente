@@ -537,7 +537,8 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         let name = name.trim().to_string();
         let value = value.trim().to_string();
 
-        super::validate_token(&name)?;
+        super::syntax::validate_token(&name)?;
+        super::syntax::validate_field_content(value.as_bytes())?;
 
         let name = HeaderName::from(name);
         if let HeaderName::Other(name) = &name {

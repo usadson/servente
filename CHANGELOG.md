@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Support **`OPTIONS`** request methods
 - **Collaudatrice**, a tester for HTTP compliance and other web and
   webserver-related conformance and best practices.
+- Add validation for request header field values ([RFC 9110 Section 5.5](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.5)).
 
 ### Changed
 - Restructure repository for multi-crate config (Cargo workspace)

@@ -106,4 +106,6 @@ pub enum HttpParseError {
     TokenContainsNonVisibleAscii,
     TokenContainsWhitespace,
     TokenEmpty,
+
+    FieldValueContainsInvalidCharacters,
 }
