@@ -1302,7 +1302,7 @@ mod tests {
         send_frame(&mut buf, frame).await.unwrap();
         println!("Buf: {:#x?}", buf);
 
-        println!("{:#x?}", &(1 as u32).to_le_bytes());
+        println!("{:#x?}", &1_u32.to_le_bytes());
         assert_eq!(buf.len(), 10);
 
         assert_eq!(buf[0..3], [0x00, 0x00, 0x01], "Length incorrect");

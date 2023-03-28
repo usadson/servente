@@ -1508,7 +1508,7 @@ mod tests {
             assert_eq!(name, HeaderName::SecChUaMobile);
             assert_eq!(value.as_str_no_convert(), Some("?0"));
         } else {
-            assert!(false, "invalid type: {:#?}", first);
+            panic!("invalid type: {:#?}", first);
         }
 
         assert_eq!(table.get(STATIC_TABLE.len() + 1, None), Ok(DynamicTableEntry::Method(Method::Connect)));

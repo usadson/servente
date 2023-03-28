@@ -1317,7 +1317,7 @@ mod tests {
 
             assert!(!name.to_string_lowercase().bytes().any(|b| (b as char).is_uppercase()));
 
-            assert!(!name.to_string_h1().split('-').any(|str| !str.is_empty() && str.chars().nth(0).unwrap().is_ascii_lowercase()),
+            assert!(!name.to_string_h1().split('-').any(|str| !str.is_empty() && str.chars().next().unwrap().is_ascii_lowercase()),
                 "HTTP/1.1 Header names should have uppercase letters");
         }
     }
