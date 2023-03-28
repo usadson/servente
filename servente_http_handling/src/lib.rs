@@ -9,7 +9,7 @@ use std::{
     time::SystemTime, env::current_dir,
 };
 
-use servente_http::HttpParseError;
+use servente_http::{HttpParseError, lists::find_best_match_in_weighted_list};
 
 use servente_http::*;
 use servente_resources::{MediaType, static_resources, CachedFileDetails, cache};
@@ -270,19 +270,18 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
     match request_target {
         "/" | "/index" | "/index.html" => {
             if let Some(accepted_languages) = request.headers.get(&HeaderName::AcceptLanguage) {
-                if let Some(accepted_languages) = AcceptedLanguages::parse(accepted_languages.as_str_no_convert().unwrap()) {
-                    if let Some(best) = accepted_languages.match_best(vec!["nl", "en"]) {
-                        if best == "nl" {
-                            response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
-                            response.headers.set(HeaderName::ContentLanguage, "nl".into());
-                            response.headers.set(HeaderName::ETag, "welcome-nl".into());
-                            if request_etag == Some("welcome-nl") {
-                                return serve_welcome_page_not_modified(request);
-                            }
-                        } else if request_etag == Some("welcome-en") {
+                match find_best_match_in_weighted_list(accepted_languages.as_str_no_convert().unwrap(), &["nl", "en"]) {
+                    Some(0) => {
+                        response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
+                        response.headers.set(HeaderName::ContentLanguage, "nl".into());
+                        response.headers.set(HeaderName::ETag, "welcome-nl".into());
+                        if request_etag == Some("welcome-nl") {
                             return serve_welcome_page_not_modified(request);
                         }
                     }
+                    _ => if request_etag == Some("welcome-en") {
+                        return serve_welcome_page_not_modified(request);
+                    },
                 }
             }
         }

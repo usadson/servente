@@ -1,10 +1,9 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-pub mod languages;
+pub mod lists;
 pub mod sec_fetch_dest;
 
-pub use languages::*;
 pub use sec_fetch_dest::*;
 
 use std::time::SystemTime;

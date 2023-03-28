@@ -23,6 +23,30 @@ fn is_field_value_character(byte: u8) -> bool {
     abnf::is_visible_character(byte) || validate_obs_text(byte)
 }
 
+/// Returns whether or not the character is whitespace according to the HTTP
+/// specification. This is in effect just `U+0020 SPACE` and `U+0009 CHARACTER
+/// TABULATION`.
+///
+/// This isn't an actual definition, but used in the `OWS` (optional whitespace),
+/// `RWS` (required whitespace) and `BWS` (bad whitespace).
+///
+/// # Definition
+/// ```text
+/// OWS            = *( SP / HTAB )
+///                ; optional whitespace
+/// RWS            = 1*( SP / HTAB )
+///                ; required whitespace
+/// BWS            = OWS
+///                ; "bad" whitespace
+/// ```
+///
+/// # References
+/// * [RFC 9110 Section 5.6.3](https://www.rfc-editor.org/rfc/rfc9110.html#name-whitespace)
+#[inline]
+pub fn is_whitespace_character(character: char) -> bool {
+    character == ' ' || character == '\t'
+}
+
 /// Validate obs-text.
 /// ```text
 /// obs-text       = %x80-FF

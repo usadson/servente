@@ -27,6 +27,21 @@ pub fn is_visible_character(byte: u8) -> bool {
     matches!(byte, 0x21..=0x7E)
 }
 
+/// Parses a digit character.
+///
+/// ```text
+/// DIGIT       =  "0" / "1" / "2" / "3" / "4" / "5" / "6" /
+///                "7" / "8" / "9"
+/// ```
+#[inline]
+pub fn parse_digit_character(value: char) -> Option<u8> {
+    if value.is_ascii_digit() {
+        Some((value as u8) - b'0')
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
