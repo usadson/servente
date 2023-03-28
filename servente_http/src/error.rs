@@ -3,6 +3,26 @@
 
 use strum_macros::AsRefStr;
 
+use std::io;
+
+#[derive(Debug)]
+pub enum Error {
+    ParseError(HttpParseError),
+    Other(io::Error),
+}
+
+impl From<HttpParseError> for Error {
+    fn from(error: HttpParseError) -> Self {
+        Error::ParseError(error)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(error: io::Error) -> Self {
+        Error::Other(error)
+    }
+}
+
 /// An error that can occur while parsing an HTTP request.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, AsRefStr)]
 pub enum HttpParseError {

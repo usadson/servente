@@ -8,27 +8,14 @@
 //     clippy::missing_panics_doc
 // )]
 
+use servente_http_handling::{handler, ServenteConfig};
 use servente_resources::cache;
 use tokio::task;
 
 use std::{io, sync::Arc, time::Instant, env::current_dir};
 
-mod abnf;
 mod cert;
-mod client;
 mod example_handlers;
-mod handler;
-pub mod http;
-mod platform;
-
-#[derive(Clone)]
-pub struct ServenteConfig {
-    pub tls_config: Arc<rustls::ServerConfig>,
-    pub handler_controller: handler::HandlerController,
-}
-
-unsafe impl Send for ServenteConfig {}
-unsafe impl Sync for ServenteConfig {}
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -75,12 +62,12 @@ async fn main() -> io::Result<()> {
     println!("Loaded after {} ms", start.elapsed().as_millis());
 
     let join_handle = task::spawn(async move {
-        http::v1::start("127.0.0.1:8080", config).await
+        servente_http1::start("127.0.0.1:8080", config).await
     });
 
     #[cfg(feature = "http3")]
     let join_handle_v3 = task::spawn(async move {
-        http::v3::start(config_v3.tls_config).await
+        servente_http3::start(config_v3.tls_config).await
     });
 
     let wwwroot_path_cacher = wwwroot_path.clone();

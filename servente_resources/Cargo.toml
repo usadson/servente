@@ -7,8 +7,8 @@ version.workspace = true
 [dependencies]
 brotli = { version = "*", default-features = false, features = ["std"] }
 flate2 = "*"
-httpdate = "*"
 lazy_static = "*"
+notify = { version = "*", optional = true }
 phf = { version = "0.11.1", features = ["macros", "unicase"] }
 stretto = { version = "*", features = ["async"] }
 tokio = { version = "*", features = ["full"] }
@@ -18,3 +18,5 @@ servente_generator = { version = "*", path = "../servente_generator", default-fe
 
 [features]
 convert-markdown = ["servente_generator/markdown"]
+debugging = []
+watch = ["dep:notify"]

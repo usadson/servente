@@ -2,8 +2,12 @@
 members = [
     "collaudatrice",
     "servente",
+    "servente_common",
     "servente_generator",
     "servente_http",
+    "servente_http_handling",
+    "servente_http2",
+    "servente_http3",
     "servente_resources",
 ]
 

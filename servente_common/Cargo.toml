@@ -1,0 +1,10 @@
+[package]
+name = "servente_common"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+
+[features]
+debugging = []

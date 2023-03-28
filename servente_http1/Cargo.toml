@@ -1,0 +1,27 @@
+[package]
+name = "servente_http1"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+hashbrown = "*"
+itertools = "*"
+ktls = { version = "*", optional = true }
+lazy_static = "*"
+rstest = "*"
+rustls = { version = "*", features = ["quic", "secret_extraction"] }
+tokio = { version = "*", features = ["full"] }
+tokio-rustls = "*"
+
+
+servente_common = { version = "*", path = "../servente_common" }
+servente_http = { version = "*", path = "../servente_http" }
+servente_http_handling = { version = "*", path = "../servente_http_handling" }
+servente_http2 = { version = "*", path = "../servente_http2", optional = true }
+servente_resources = { version = "*", path = "../servente_resources" }
+
+[features]
+debugging = []
+http2 = ["dep:servente_http2"]
+ktls = ["dep:ktls"]

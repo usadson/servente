@@ -1,6 +1,8 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+#![allow(dead_code)]
+
 use std::{
     io,
     net::{
@@ -30,8 +32,6 @@ async fn handle_connection(connection: quinn::Connecting) -> io::Result<()> {
             _ = fut.await;
         });
     }
-
-    Ok(())
 }
 
 async fn handle_request(send_stream: SendStream, recv_stream: RecvStream) -> io::Result<()> {

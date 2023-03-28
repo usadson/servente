@@ -8,42 +8,85 @@ version.workspace = true
 anyhow = "*"
 futures = "*"
 hashbrown = "*"
-httpdate = "*"
 itertools = "*"
 lazy_static = "*"
 rcgen = "*"
 rstest = "*"
 rustls = { version = "*", features = ["quic", "secret_extraction"] }
 rustls-pemfile = "*"
-strum = "*"
 strum_macros = "*"
 tokio = { version = "*", features = ["full"] }
 tokio-rustls = "*"
 phf = { version = "*", features = ["macros", "unicase"] }
 unicase = "*"
-urlencoding = "*"
 
 
 # Optional dependencies
 scraper = { version = "*", optional = true }
-notify = { version = "*", optional = true }
-quinn = { version = "*", features = ["rustls"], optional = true }
 ktls = { version = "*", optional = true }
 
 servente_generator = { version = "*", path = "../servente_generator", default-features = false }
 servente_resources = { version = "*", path = "../servente_resources" }
 servente_http = { version = "*", path = "../servente_http" }
+servente_http_handling = { version = "*", path = "../servente_http_handling" }
+servente_http1 = { version = "*", path = "../servente_http1" }
+servente_http2 = { version = "*", path = "../servente_http2", optional = true }
+servente_http3 = { version = "*", path = "../servente_http3", optional = true }
 
 [features]
-default = ["analysis", "watch", "http2", "convert-markdown"]
+default = [
+    "analysis",
+    "convert-markdown",
+    "http2",
+    "watch",
+]
 
-analysis = ["dep:scraper"]
-debugging = []
-ktls = ["dep:ktls"]
-http2 = []
-http3 = ["dep:quinn"]
+# Analyze files
+analysis = [
+    "dep:scraper"
+]
 
-convert-markdown = ["servente_generator/markdown", "servente_resources/convert-markdown"]
+# Convert Markdown to HTML (does not replace original file)
+convert-markdown = [
+    "servente_generator/markdown",
+    "servente_http_handling/convert-markdown",
+    "servente_resources/convert-markdown",
+]
+
+# Extensive debugging information for developers
+debugging = [
+    "servente_http/debugging",
+    "servente_http_handling/debugging",
+    "servente_http1/debugging",
+    "servente_http2?/debugging",
+    "servente_http3?/debugging",
+    "servente_resources/debugging",
+]
+
+# WIP: Kernel TLS support (for `sendfile`)
+ktls = [
+    "dep:ktls",
+    "servente_http1/ktls"
+]
+
+# HTTP/2 support
+http2 = [
+    "dep:servente_http2",
+    "servente_http1/http2",
+    "servente_http_handling/http2",
+]
+
+# HTTP/3 support
+http3 = [
+    "dep:servente_http3",
+    "servente_http_handling/http3",
+]
+
+server_push = [
+    "servente_http2?/server_push"
+]
 
 # Watch for changes in the filesystem
-watch = ["dep:notify"]
+watch = [
+    "servente_resources/watch"
+]

@@ -1,49 +1,27 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod handler;
+
 use std::{
-    io,
     path::Path,
     sync::Arc,
     time::SystemTime, env::current_dir,
 };
 
-use crate::ServenteConfig;
-
-use self::{
-    error::HttpParseError,
-};
+use servente_http::HttpParseError;
 
 use servente_http::*;
 use servente_resources::{MediaType, static_resources, CachedFileDetails, cache};
 
-pub mod error;
-mod syntax;
-pub mod v1;
-
-#[cfg(feature = "http2")]
-pub mod v2;
-
-#[cfg(feature = "http3")]
-pub mod v3;
-
-#[derive(Debug)]
-pub enum Error {
-    ParseError(HttpParseError),
-    Other(io::Error),
+#[derive(Clone)]
+pub struct ServenteConfig {
+    pub tls_config: Arc<rustls::ServerConfig>,
+    pub handler_controller: handler::HandlerController,
 }
 
-impl From<HttpParseError> for Error {
-    fn from(error: HttpParseError) -> Self {
-        Error::ParseError(error)
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Self {
-        Error::Other(error)
-    }
-}
+unsafe impl Send for ServenteConfig {}
+unsafe impl Sync for ServenteConfig {}
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
 fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Option<Response> {
@@ -367,6 +345,7 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
         return None
     };
 
+    #[cfg(feature = "convert-markdown")]
     let cached = match &cached.value().cache_details {
         Some(CachedFileDetails::Markdown { html_rendered }) => Arc::clone(html_rendered),
         _ => Arc::clone(cached.value())

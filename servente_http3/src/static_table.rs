@@ -1,10 +1,15 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use crate::http::message::{Method, StatusCode};
+#![allow(dead_code)]
+
+use servente_http::{
+    Method,
+    StatusCode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum StaticMethod {
+enum StaticMethod {
     Connect,
     Delete,
     Get,

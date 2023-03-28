@@ -7,9 +7,10 @@
 //! # References
 //! * [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html)
 
-use crate::abnf;
-
-use super::error::HttpParseError;
+use crate::{
+    abnf,
+    HttpParseError,
+};
 
 /// Validate a field character. Note that in HTTP, UTF-8 is optional (US-ASCII),
 /// and isn't used before validating the content.

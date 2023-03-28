@@ -382,7 +382,8 @@ impl DynamicTableEntry {
     /// ```
     ///
     /// As represented by the following Servente code:
-    /// ```
+    /// ```ignore
+    /// use servente_http2::hpack::DynamicTableEntry;
     /// let entry = DynamicTableEntry::Authority("www.example.com".into());
     /// let size = entry.calculate_size();
     /// assert_eq!(size, 57);
@@ -1459,7 +1460,7 @@ mod tests {
     use rstest::rstest;
 
     use servente_http::{RequestTarget, HttpVersion};
-    use crate::http::v2::{BinaryRequest, StreamId};
+    use crate::{BinaryRequest, StreamId};
 
     use super::*;
 

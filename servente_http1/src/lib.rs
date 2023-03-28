@@ -15,22 +15,21 @@ use std::{
     io::{self, SeekFrom},
     mem::swap,
     time::Duration,
-    sync::Arc,
 };
 
 #[cfg(feature = "ktls")]
 use std::{ops::DerefMut, pin};
 
-use crate::{
-    http::{
-        Error,
-        error::HttpParseError,
-        finish_response_error,
-        finish_response_normal,
-        handle_parse_error,
-        handle_request,
-    },
-    ServenteConfig,
+use servente_http::{
+    Error,
+    HttpParseError,
+};
+
+use servente_http_handling::{
+    finish_response_error,
+    finish_response_normal,
+    handle_parse_error,
+    handle_request, ServenteConfig,
 };
 
 use servente_http::{
@@ -488,7 +487,7 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
         if let Err(e) = handle_exchange(&mut connection, &config).await {
             #[cfg(feature = "http2")]
             if let ExchangeError::Http2Upgrade = e {
-                super::v2::handle_client(reader, writer, Arc::new(config)).await;
+                servente_http2::handle_client(reader, writer, std::sync::Arc::new(config)).await;
                 return;
             }
 
@@ -540,8 +539,8 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         let name = name.trim().to_string();
         let value = value.trim().to_string();
 
-        super::syntax::validate_token(&name)?;
-        super::syntax::validate_field_content(value.as_bytes())?;
+        servente_http::syntax::validate_token(&name)?;
+        servente_http::syntax::validate_field_content(value.as_bytes())?;
 
         let name = HeaderName::from(name);
         if let HeaderName::Other(name) = &name {
@@ -788,7 +787,7 @@ pub async fn start(address: &str, config: ServenteConfig) -> io::Result<()> {
             Err(e) => {
                 #[cfg(unix)]
                 if let Some(os_error) = e.raw_os_error() {
-                    if os_error == crate::platform::unix::ERRNO_EMFILE {
+                    if os_error == servente_common::platform::unix::ERRNO_EMFILE {
                         task::yield_now().await;
                         continue;
                     }
@@ -921,11 +920,6 @@ async fn transfer_body_ranges<O, I>(output: &mut O, input: &mut I, ranges: HttpR
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-
-    use crate::http::{
-        error::HttpParseError,
-        Error,
-    };
 
     use servente_http::*;
 

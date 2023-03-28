@@ -26,12 +26,12 @@ use tokio::{
 
 use tokio_rustls::server::TlsStream;
 
-use crate::ServenteConfig;
+use servente_http_handling::ServenteConfig;
 
 use self::hpack::DynamicTable;
 
 mod bits;
-mod hpack;
+pub mod hpack;
 
 type Reader = BufReader<ReadHalf<TlsStream<TcpStream>>>;
 type Writer = BufWriter<WriteHalf<TlsStream<TcpStream>>>;
@@ -1291,8 +1291,8 @@ async fn handle_request_inner(mut binary_request: BinaryRequest, dynamic_table: 
             }
         }
     }
-    let mut response = super::handle_request(&request, config.as_ref()).await;
-    super::finish_response_normal(&request, &mut response).await;
+    let mut response = servente_http_handling::handle_request(&request, config.as_ref()).await;
+    servente_http_handling::finish_response_normal(&request, &mut response).await;
     Ok(response)
 }
 
