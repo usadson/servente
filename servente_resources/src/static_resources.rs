@@ -10,7 +10,7 @@
 // There isn't an environment variable like `CARGO_WORKSPACE_DIR` yet, so
 // we resort to using relative paths instead.
 //
-// `CARGO_MANIFEST_DIR` will return `[repository]/servente/` so `..` will
+// `CARGO_MANIFEST_DIR` will return `[repository]/servente_http/` so `..` will
 // get the workspace directory.
 
 /// The HTML page that is shown when the user visits the root of the

@@ -8,39 +8,16 @@ use std::{
     time::SystemTime, env::current_dir,
 };
 
-use crate::{
-    resources::{
-        self,
-        cache::{
-            self,
-            CachedFileDetails,
-        },
-        MediaType,
-        static_res,
-    },
-    ServenteConfig,
-};
+use crate::ServenteConfig;
 
 use self::{
     error::HttpParseError,
-    hints::AcceptedLanguages,
-    message::{
-        BodyKind,
-        HeaderName,
-        HeaderValue,
-        Method,
-        Request,
-        RequestTarget,
-        Response,
-        StatusCode,
-        StatusCodeClass,
-        format_system_time_as_weak_etag,
-    },
 };
 
+use servente_http::*;
+use servente_resources::{MediaType, static_resources, CachedFileDetails, cache};
+
 pub mod error;
-pub mod hints;
-pub mod message;
 mod syntax;
 pub mod v1;
 
@@ -304,7 +281,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
     response.headers.set(HeaderName::CacheControl, "public, max-age=600".into());
     response.headers.set(HeaderName::ContentSecurityPolicy, "default-src 'self'; upgrade-insecure-requests; style-src-elem 'self' 'unsafe-inline'".into());
 
-    response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML));
+    response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML));
     response.headers.set(HeaderName::ContentLanguage, "en".into());
     response.headers.set(HeaderName::LastModified, HeaderValue::from(SystemTime::UNIX_EPOCH));
     response.headers.set(HeaderName::ETag, "welcome-en".into());
@@ -318,7 +295,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
                 if let Some(accepted_languages) = AcceptedLanguages::parse(accepted_languages.as_str_no_convert().unwrap()) {
                     if let Some(best) = accepted_languages.match_best(vec!["nl", "en"]) {
                         if best == "nl" {
-                            response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML_NL));
+                            response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
                             response.headers.set(HeaderName::ContentLanguage, "nl".into());
                             response.headers.set(HeaderName::ETag, "welcome-nl".into());
                             if request_etag == Some("welcome-nl") {
@@ -333,7 +310,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
         }
         "/welcome.en.html" => (),
         "/welcome.nl.html" => {
-            response.body = Some(BodyKind::StaticString(static_res::WELCOME_HTML_NL));
+            response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
             response.headers.set(HeaderName::ContentLanguage, "nl".into());
         }
         _ => return Response::with_status_and_string_body(StatusCode::NotFound, "Not Found"),
@@ -354,7 +331,7 @@ async fn serve_file(request: &Request, path: &Path) -> Option<Response> {
 async fn serve_file_from_disk(path: &Path) -> Option<Response> {
     // Check if the file is allowed to be served. The cache already checked
     // this, but we need to check it again for files that are not cached.
-    if !resources::is_file_allowed_to_be_served(path.to_string_lossy().as_ref()) {
+    if !servente_resources::is_file_allowed_to_be_served(path.to_string_lossy().as_ref()) {
         return None;
     }
 

@@ -1,10 +1,16 @@
 [workspace]
-
 members = [
     "collaudatrice",
     "servente",
     "servente_generator",
+    "servente_http",
+    "servente_resources",
 ]
+
+[workspace.package]
+edition = "2021"
+repository = "https://github.com/usadson/servente/"
+version = "0.2.1"
 
 [profile.release]
 opt-level = 3

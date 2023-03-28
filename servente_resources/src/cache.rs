@@ -177,6 +177,8 @@ pub async fn maybe_cache_file(path: &Path) {
 /// Convert the file to HTML if it is a Markdown file.
 #[cfg(feature = "convert-markdown")]
 async fn maybe_convert_markdown_htmlized(path: &str, cached: &mut ContentEncodedVersions) {
+    use crate::MediaType;
+
     if cached.cache_details.is_some() {
         return;
     }
@@ -185,7 +187,7 @@ async fn maybe_convert_markdown_htmlized(path: &str, cached: &mut ContentEncoded
         let htmlized = servente_generator::common_mark::convert_to_html(String::from_utf8_lossy(cached.uncompressed.as_slice()).as_ref());
 
         let mut data = ContentEncodedVersions::create(htmlized.into());
-        data.media_type = Some(crate::resources::MediaType::HTML);
+        data.media_type = Some(MediaType::HTML);
         data.modified_date = cached.modified_date;
 
         cached.cache_details = Some(CachedFileDetails::Markdown {
@@ -204,7 +206,7 @@ fn path_buf_to_string(path: PathBuf) -> String {
 
 /// Called when the file is removed from the disk, so it should be pruned from
 /// the memory cache as well.
-fn remove_files_from_cache(paths: Vec<PathBuf>) {
+pub fn remove_files_from_cache(paths: Vec<PathBuf>) {
     tokio::task::spawn(async move {
         for path in paths {
             FILE_CACHE.remove(&path.to_string_lossy().to_string()).await;

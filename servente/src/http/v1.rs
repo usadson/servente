@@ -29,25 +29,28 @@ use crate::{
         finish_response_normal,
         handle_parse_error,
         handle_request,
-        message::{
-            BodyKind,
-            ContentRangeHeaderValue,
-            HttpVersion,
-            HeaderName,
-            HeaderMap,
-            HeaderValue,
-            HttpRangeList,
-            Method,
-            Range,
-            Response,
-            Request,
-            RequestTarget,
-            StatusCode,
-            StatusCodeClass,
-        },
     },
-    ServenteConfig, resources::ContentCoding,
+    ServenteConfig,
 };
+
+use servente_http::{
+    BodyKind,
+    ContentRangeHeaderValue,
+    HttpVersion,
+    HeaderName,
+    HeaderMap,
+    HeaderValue,
+    HttpRangeList,
+    Method,
+    Range,
+    Response,
+    Request,
+    RequestTarget,
+    StatusCode,
+    StatusCodeClass,
+};
+
+use servente_resources::ContentCoding;
 
 /// The threshold at which the response body is transferred using chunked
 /// encoding.
@@ -919,7 +922,12 @@ async fn transfer_body_ranges<O, I>(output: &mut O, input: &mut I, ranges: HttpR
 mod tests {
     use rstest::rstest;
 
-    use crate::http::{message::{Method, RequestTarget, HttpVersion}, error::HttpParseError, Error};
+    use crate::http::{
+        error::HttpParseError,
+        Error,
+    };
+
+    use servente_http::*;
 
     #[tokio::test]
     async fn read_request_line_normal() {

@@ -17,14 +17,14 @@ use std::{
 
 use tokio::sync::Mutex;
 
-use crate::http::message::{
+use servente_http::{
     HeaderName,
     HeaderMap,
     HeaderValue,
     Method,
     Request,
     Response,
-    StatusCode,
+    StatusCode, HttpVersion, RequestTarget,
 };
 
 /// HPACK write extensions for [`Write`] objects
@@ -1173,8 +1173,8 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
 
     Ok(Request {
         method,
-        target: crate::http::message::RequestTarget::Origin { path, query: String::new() },
-        version: crate::http::message::HttpVersion::Http2,
+        target: RequestTarget::Origin { path, query: String::new() },
+        version: HttpVersion::Http2,
         headers: HeaderMap::new_with_vec(headers),
         body: None
     })
@@ -1458,7 +1458,7 @@ fn validate_path(value: &str) -> Result<(), DecompressionError> {
 mod tests {
     use rstest::rstest;
 
-    use crate::http::message::{RequestTarget, HttpVersion};
+    use servente_http::{RequestTarget, HttpVersion};
     use crate::http::v2::{BinaryRequest, StreamId};
 
     use super::*;

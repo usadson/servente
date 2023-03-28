@@ -5,9 +5,12 @@ use std::{
     collections::HashMap
 };
 
-use crate::http::message::{
+use servente_http::{
+    HeaderName,
+    Method,
     Request,
-    Response, Method, StatusCode, HeaderName,
+    Response,
+    StatusCode,
 };
 
 use itertools::Itertools;

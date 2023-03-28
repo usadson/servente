@@ -3,7 +3,7 @@
 
 use crate::handler::HandlerController;
 
-use crate::http::message::{
+use servente_http::{
     Request,
     Response, StatusCode,
 };

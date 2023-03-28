@@ -1,0 +1,13 @@
+[package]
+name = "servente_http"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+httpdate = "*"
+phf = { version = "0.11.1", features = ["macros", "unicase"] }
+tokio = { version = "*", features = ["full"] }
+unicase = "*"
+
+servente_resources = { version = "*", path = "../servente_resources" }

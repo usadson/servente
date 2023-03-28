@@ -8,6 +8,7 @@
 //     clippy::missing_panics_doc
 // )]
 
+use servente_resources::cache;
 use tokio::task;
 
 use std::{io, sync::Arc, time::Instant, env::current_dir};
@@ -19,7 +20,6 @@ mod example_handlers;
 mod handler;
 pub mod http;
 mod platform;
-mod resources;
 
 #[derive(Clone)]
 pub struct ServenteConfig {
@@ -85,7 +85,7 @@ async fn main() -> io::Result<()> {
 
     let wwwroot_path_cacher = wwwroot_path.clone();
     let join_handle_cache = task::spawn(async move {
-        resources::cache::start(&wwwroot_path_cacher).await
+        cache::start(&wwwroot_path_cacher).await
     });
 
     if let Err(e) = join_handle.await.unwrap() {

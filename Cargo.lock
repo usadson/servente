@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "collaudatrice"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1660,11 +1660,9 @@ checksum = "771d4d9c4163ee138805e12c710dd365e4f44be8be0503cb1bb9eb989425d9c9"
 
 [[package]]
 name = "servente"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
- "brotli",
- "flate2",
  "futures",
  "hashbrown",
  "httpdate",
@@ -1680,7 +1678,8 @@ dependencies = [
  "rustls-pemfile",
  "scraper",
  "servente_generator",
- "stretto",
+ "servente_http",
+ "servente_resources",
  "strum",
  "strum_macros",
  "tokio",
@@ -1694,6 +1693,32 @@ name = "servente_generator"
 version = "0.1.0"
 dependencies = [
  "regex",
+]
+
+[[package]]
+name = "servente_http"
+version = "0.2.1"
+dependencies = [
+ "httpdate",
+ "phf 0.11.1",
+ "servente_resources",
+ "tokio",
+ "unicase",
+]
+
+[[package]]
+name = "servente_resources"
+version = "0.2.1"
+dependencies = [
+ "brotli",
+ "flate2",
+ "httpdate",
+ "lazy_static",
+ "phf 0.11.1",
+ "servente_generator",
+ "stretto",
+ "tokio",
+ "unicase",
 ]
 
 [[package]]

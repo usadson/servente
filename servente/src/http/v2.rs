@@ -3,6 +3,13 @@
 
 use std::{sync::Arc, time::{Instant, Duration}, fmt::Debug};
 
+use servente_http::{
+    BodyKind,
+    HeaderName,
+    Request,
+    Response,
+};
+
 use tokio::{
     io::{
         AsyncReadExt,
@@ -22,8 +29,6 @@ use tokio_rustls::server::TlsStream;
 use crate::ServenteConfig;
 
 use self::hpack::DynamicTable;
-
-use super::message::{Response, Request, HeaderName};
 
 mod bits;
 mod hpack;
@@ -549,13 +554,13 @@ impl Connection {
     async fn send_response(&mut self, stream_id: StreamId, mut response: Response) -> Result<(), ConnectionError> {
         let content_length = if let Some(body) = &response.body {
             match body {
-                super::message::BodyKind::Bytes(data) => data.len(),
-                super::message::BodyKind::CachedBytes(versions, coding) => {
+                BodyKind::Bytes(data) => data.len(),
+                BodyKind::CachedBytes(versions, coding) => {
                     versions.get_version(*coding).len()
                 }
-                super::message::BodyKind::File{ metadata, .. } => metadata.len() as usize,
-                super::message::BodyKind::String(data) => data.len(),
-                super::message::BodyKind::StaticString(str) => str.len(),
+                BodyKind::File{ metadata, .. } => metadata.len() as usize,
+                BodyKind::String(data) => data.len(),
+                BodyKind::StaticString(str) => str.len(),
             }
         } else {
             0
@@ -568,13 +573,13 @@ impl Connection {
 
         if let Some(body) = response.body {
             match body {
-                super::message::BodyKind::Bytes(data) => {
+                BodyKind::Bytes(data) => {
                     self.send_data_frame_from_slice(stream_id, &data).await?;
                 }
-                super::message::BodyKind::CachedBytes(versions, coding) => {
+                BodyKind::CachedBytes(versions, coding) => {
                     self.send_data_frame_from_slice(stream_id, versions.get_version(coding)).await?;
                 }
-                super::message::BodyKind::File{ handle, .. } => {
+                BodyKind::File{ handle, .. } => {
                     let mut file = handle;
                     let buffer_length = self.settings.maximum_payload_size.0 as _;
                     let mut buffer = vec![0, buffer_length];
@@ -589,10 +594,10 @@ impl Connection {
                     // We are allowed to send an empty DATA frame with END_STREAM set.
                     self.send_frame(Frame::Data { end_stream: true, stream_id, payload: Vec::new() }).await?;
                 }
-                super::message::BodyKind::String(data) => {
+                BodyKind::String(data) => {
                     self.send_data_frame_from_slice(stream_id, data.as_bytes()).await?;
                 }
-                super::message::BodyKind::StaticString(str) => {
+                BodyKind::StaticString(str) => {
                     self.send_data_frame_from_slice(stream_id, str.as_bytes()).await?;
                 }
             }

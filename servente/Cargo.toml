@@ -1,12 +1,11 @@
 [package]
 name = "servente"
-version = "0.2.0"
-edition = "2021"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
 
 [dependencies]
 anyhow = "*"
-brotli = { version = "*", default-features = false, features = ["std"] }
-flate2 = "*"
 futures = "*"
 hashbrown = "*"
 httpdate = "*"
@@ -16,7 +15,6 @@ rcgen = "*"
 rstest = "*"
 rustls = { version = "*", features = ["quic", "secret_extraction"] }
 rustls-pemfile = "*"
-stretto = { version = "*", features = ["async"] }
 strum = "*"
 strum_macros = "*"
 tokio = { version = "*", features = ["full"] }
@@ -33,6 +31,8 @@ quinn = { version = "*", features = ["rustls"], optional = true }
 ktls = { version = "*", optional = true }
 
 servente_generator = { version = "*", path = "../servente_generator", default-features = false }
+servente_resources = { version = "*", path = "../servente_resources" }
+servente_http = { version = "*", path = "../servente_http" }
 
 [features]
 default = ["analysis", "watch", "http2", "convert-markdown"]
@@ -43,7 +43,7 @@ ktls = ["dep:ktls"]
 http2 = []
 http3 = ["dep:quinn"]
 
-convert-markdown = ["servente_generator/markdown"]
+convert-markdown = ["servente_generator/markdown", "servente_resources/convert-markdown"]
 
 # Watch for changes in the filesystem
 watch = ["dep:notify"]
