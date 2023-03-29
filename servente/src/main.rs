@@ -14,7 +14,6 @@ use tokio::task;
 
 use std::{io, sync::Arc, time::{Instant, Duration}, env::current_dir};
 
-mod cert;
 mod example_handlers;
 
 #[tokio::main]
@@ -23,7 +22,7 @@ async fn main() -> io::Result<()> {
 
     let wwwroot_path = current_dir().unwrap().join("wwwroot");
 
-    let cert_data = cert::load_certificate_locations();
+    let cert_data = servente_self_signed_cert::load_certificate_locations();
 
     let mut tls_config = rustls::ServerConfig::builder()
         .with_safe_defaults()

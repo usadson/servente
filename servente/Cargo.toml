@@ -32,6 +32,7 @@ servente_http_handling = { version = "*", path = "../servente_http_handling" }
 servente_http1 = { version = "*", path = "../servente_http1" }
 servente_http2 = { version = "*", path = "../servente_http2", optional = true }
 servente_http3 = { version = "*", path = "../servente_http3", optional = true }
+servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
 
 [features]
 default = [
@@ -50,6 +51,7 @@ analysis = [
 convert-markdown = [
     "servente_generator/markdown",
     "servente_http_handling/convert-markdown",
+    "servente_http1/convert-markdown",
     "servente_resources/convert-markdown",
 ]
 

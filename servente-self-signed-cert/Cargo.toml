@@ -1,0 +1,10 @@
+[package]
+name = "servente_self_signed_cert"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+rcgen = "*"
+rustls = "*"
+
