@@ -2,7 +2,6 @@
 // All Rights Reserved.
 
 use phf::phf_map;
-use unicase::UniCase;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Method {
@@ -108,51 +107,53 @@ impl Method {
     }
 }
 
-static METHOD_MAP: phf::Map<UniCase<&'static str>, Method> = phf_map!(
-    UniCase::ascii("acl") => Method::Acl,
-    UniCase::ascii("baseline-control") => Method::BaselineControl,
-    UniCase::ascii("bind") => Method::Bind,
-    UniCase::ascii("checkin") => Method::CheckIn,
-    UniCase::ascii("checkout") => Method::CheckOut,
-    UniCase::ascii("connect") => Method::Connect,
-    UniCase::ascii("copy") => Method::Copy,
-    UniCase::ascii("delete") => Method::Delete,
-    UniCase::ascii("get") => Method::Get,
-    UniCase::ascii("head") => Method::Head,
-    UniCase::ascii("label") => Method::Label,
-    UniCase::ascii("link") => Method::Link,
-    UniCase::ascii("lock") => Method::Lock,
-    UniCase::ascii("merge") => Method::Merge,
-    UniCase::ascii("mkactivity") => Method::MkActivity,
-    UniCase::ascii("mkcalendar") => Method::MkCalendar,
-    UniCase::ascii("mkcol") => Method::MkCol,
-    UniCase::ascii("mkredirectref") => Method::MkRedirectRef,
-    UniCase::ascii("mkworkspace") => Method::MkWorkspace,
-    UniCase::ascii("move") => Method::Move,
-    UniCase::ascii("options") => Method::Options,
-    UniCase::ascii("orderpatch") => Method::OrderPatch,
-    UniCase::ascii("patch") => Method::Patch,
-    UniCase::ascii("post") => Method::Post,
-    UniCase::ascii("pri") => Method::Pri,
-    UniCase::ascii("propfind") => Method::PropFind,
-    UniCase::ascii("proppatch") => Method::PropPatch,
-    UniCase::ascii("put") => Method::Put,
-    UniCase::ascii("rebind") => Method::Rebind,
-    UniCase::ascii("report") => Method::Report,
-    UniCase::ascii("search") => Method::Search,
-    UniCase::ascii("trace") => Method::Trace,
-    UniCase::ascii("unbind") => Method::Unbind,
-    UniCase::ascii("uncheckout") => Method::Uncheckout,
-    UniCase::ascii("unlink") => Method::Unlink,
-    UniCase::ascii("unlock") => Method::Unlock,
-    UniCase::ascii("update") => Method::Update,
-    UniCase::ascii("updateredirectref") => Method::UpdateRedirectRef,
-    UniCase::ascii("version-control") => Method::VersionControl,
+static METHOD_MAP: phf::Map<&'static str, Method> = phf_map!(
+    "ACL" => Method::Acl,
+    "BASELINE-CONTROL" => Method::BaselineControl,
+    "BIND" => Method::Bind,
+    "CHECKIN" => Method::CheckIn,
+    "CHECKOUT" => Method::CheckOut,
+    "CONNECT" => Method::Connect,
+    "COPY" => Method::Copy,
+    "DELETE" => Method::Delete,
+    "GET" => Method::Get,
+    "HEAD" => Method::Head,
+    "LABEL" => Method::Label,
+    "LINK" => Method::Link,
+    "LOCK" => Method::Lock,
+    "MERGE" => Method::Merge,
+    "MKACTIVITY" => Method::MkActivity,
+    "MKCALENDAR" => Method::MkCalendar,
+    "MKCOL" => Method::MkCol,
+    "MKREDIRECTREF" => Method::MkRedirectRef,
+    "MKWORKSPACE" => Method::MkWorkspace,
+    "MOVE" => Method::Move,
+    "OPTIONS" => Method::Options,
+    "ORDERPATCH" => Method::OrderPatch,
+    "PATCH" => Method::Patch,
+    "POST" => Method::Post,
+    "PRI" => Method::Pri,
+    "PROPFIND" => Method::PropFind,
+    "PROPPATCH" => Method::PropPatch,
+    "PUT" => Method::Put,
+    "REBIND" => Method::Rebind,
+    "REPORT" => Method::Report,
+    "SEARCH" => Method::Search,
+    "TRACE" => Method::Trace,
+    "UNBIND" => Method::Unbind,
+    "UNCHECKOUT" => Method::Uncheckout,
+    "UNLINK" => Method::Unlink,
+    "UNLOCK" => Method::Unlock,
+    "UPDATE" => Method::Update,
+    "UPDATEREDIRECTREF" => Method::UpdateRedirectRef,
+    "VERSION-CONTROL" => Method::VersionControl,
 );
 
 impl From<String> for Method {
+    /// Methods in HTTP are case-sensitive, as per
+    /// [RFC 9110 Section 9.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.1-5)
     fn from(value: String) -> Self {
-        match METHOD_MAP.get(&UniCase::ascii(&value)) {
+        match METHOD_MAP.get(value.as_str()) {
             Some(method) => method.clone(),
             None => Method::Other(value),
         }
@@ -160,10 +161,42 @@ impl From<String> for Method {
 }
 
 impl From<&str> for Method {
+    /// Methods in HTTP are case-sensitive, as per
+    /// [RFC 9110 Section 9.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.1-5)
     fn from(value: &str) -> Self {
-        match METHOD_MAP.get(&UniCase::ascii(value)) {
+        match METHOD_MAP.get(value) {
             Some(method) => method.clone(),
             None => Method::Other(value.to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use super::*;
+
+    #[test]
+    fn test_to_and_from_string() {
+        for (from_string_identifier, method) in METHOD_MAP.entries() {
+            assert_eq!(*from_string_identifier, method.as_string(),
+                "Invalid entry: \"{from_string_identifier}\" and \"{}\"",
+                method.as_string());
+        }
+    }
+
+    #[rstest]
+    #[case("get", Method::Other(String::from("get")))]
+    #[case("GET", Method::Get)]
+    #[case("Post", Method::Other(String::from("Post")))]
+    #[case("POST", Method::Post)]
+    #[case("pRI", Method::Other(String::from("pRI")))]
+    #[case("Pri", Method::Other(String::from("Pri")))]
+    #[case("PrI", Method::Other(String::from("PrI")))]
+    #[case("PRi", Method::Other(String::from("PRi")))]
+    #[case("PRI", Method::Pri)]
+    #[test]
+    fn test_case_sensitivity(#[case] input: &str, #[case] expected: Method) {
+        assert_eq!(Method::from(input), expected);
     }
 }

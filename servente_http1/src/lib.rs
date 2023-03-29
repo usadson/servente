@@ -935,7 +935,7 @@ mod tests {
     #[rstest]
     #[case(b"DELETE / HTTP/1.1\r\n", Method::Delete)]
     #[case(b"GET / HTTP/1.1\r\n", Method::Get)]
-    #[case(b"get / HTTP/1.1\r\n", Method::Get)]
+    #[case(b"get / HTTP/1.1\r\n", Method::Other(String::from("get")))]
     #[case(b"POST / HTTP/1.1\r\n", Method::Post)]
     #[case(b"PUT / HTTP/1.1\r\n", Method::Put)]
     #[case(b"OPTIONS * HTTP/1.1\r\n", Method::Options)]
