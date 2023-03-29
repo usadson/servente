@@ -9,7 +9,6 @@ hashbrown = "*"
 itertools = "*"
 ktls = { version = "*", optional = true }
 lazy_static = "*"
-rstest = "*"
 rustls = { version = "*", features = ["quic", "secret_extraction"] }
 tokio = { version = "*", features = ["full"] }
 tokio-rustls = "*"
@@ -22,6 +21,7 @@ servente_http2 = { version = "*", path = "../servente_http2", optional = true }
 servente_resources = { version = "*", path = "../servente_resources" }
 
 [dev-dependencies]
+rstest = "*"
 tempdir = "*"
 servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
 

@@ -10,16 +10,13 @@ futures = "*"
 hashbrown = "*"
 itertools = "*"
 lazy_static = "*"
-rcgen = "*"
-rstest = "*"
-rustls = { version = "*", features = ["quic", "secret_extraction"] }
+rustls = { workspace = true }
 rustls-pemfile = "*"
 strum_macros = "*"
-tokio = { version = "*", features = ["full"] }
-tokio-rustls = "*"
+tokio = { workspace = true }
+tokio-rustls = { workspace = true }
 phf = { version = "*", features = ["macros", "unicase"] }
 unicase = "*"
-
 
 # Optional dependencies
 scraper = { version = "*", optional = true }
@@ -33,6 +30,9 @@ servente_http1 = { version = "*", path = "../servente_http1" }
 servente_http2 = { version = "*", path = "../servente_http2", optional = true }
 servente_http3 = { version = "*", path = "../servente_http3", optional = true }
 servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
+
+[dev-dependencies]
+rstest = "*"
 
 [features]
 default = [

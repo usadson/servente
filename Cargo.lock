@@ -1794,7 +1794,6 @@ dependencies = [
  "ktls",
  "lazy_static",
  "phf 0.11.1",
- "rcgen",
  "rstest",
  "rustls",
  "rustls-pemfile",

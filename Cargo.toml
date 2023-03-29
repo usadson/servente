@@ -31,3 +31,8 @@ strip = "none"
 codegen-units = 1
 lto = true
 debug = true
+
+[workspace.dependencies]
+rustls = { version = "*", features = ["quic", "secret_extraction"] }
+tokio = { version = "*", features = ["full"] }
+tokio-rustls = "*"
