@@ -1,0 +1,2 @@
+[profile.release-aggressive]
+rustflags = ["-C", "target-cpu=native", "-g", "-C", "opt-level=3"]

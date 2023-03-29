@@ -1,3 +1,5 @@
+cargo-features = ["profile-rustflags"]
+
 [workspace]
 members = [
     "collaudatrice",
@@ -21,3 +23,10 @@ opt-level = 3
 debug = true
 codegen-units = 1
 lto = true
+
+[profile.release-aggressive]
+inherits = "release"
+strip = "none"
+codegen-units = 1
+lto = true
+debug = true
