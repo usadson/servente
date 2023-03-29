@@ -128,4 +128,7 @@ pub enum HttpParseError {
     TokenEmpty,
 
     FieldValueContainsInvalidCharacters,
+
+    InvalidOctetInMethod,
+    InvalidOctetInRequestTarget,
 }

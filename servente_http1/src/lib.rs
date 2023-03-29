@@ -22,7 +22,7 @@ use std::{ops::DerefMut, pin};
 
 use servente_http::{
     Error,
-    HttpParseError,
+    HttpParseError, syntax,
 };
 
 use servente_http_handling::{
@@ -567,7 +567,8 @@ async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, Error>
 
 /// Reads a string from the stream until the given character is found, or the
 /// maximum length is reached.
-async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length: MaximumLength, length_error: HttpParseError) -> Result<String, Error>
+async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length: MaximumLength, length_error: HttpParseError,
+        byte_validator: fn(u8) -> Result<(), HttpParseError>) -> Result<String, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut buffer = String::new();
 
@@ -577,6 +578,7 @@ async fn read_string_until_character<R>(stream: &mut R, char: u8, maximum_length
             return Ok(buffer);
         }
 
+        byte_validator(byte)?;
         buffer.push(byte as char);
     }
 
@@ -644,7 +646,8 @@ async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error
 async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, HttpVersion), Error>
         where R: AsyncBufReadExt + Unpin {
 
-    let method = Method::from(read_string_until_character(stream, b' ', MaximumLength::METHOD, HttpParseError::MethodTooLarge).await?);
+    let method = Method::from(read_string_until_character(stream, b' ', MaximumLength::METHOD, HttpParseError::MethodTooLarge,
+        |b| if syntax::is_token_character(b) { Ok(()) } else { dbg!(b); Err(HttpParseError::InvalidOctetInMethod) }).await?);
 
     // TODO skip OWS
     let target = read_request_target(stream).await?;
@@ -663,7 +666,9 @@ async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, 
 /// * [RFC 9112, Section 3.2. Request Target](https://www.rfc-editor.org/rfc/rfc9112.html#name-request-target)
 async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
         where R: AsyncBufReadExt + Unpin {
-    let str = read_string_until_character(stream, b' ', MaximumLength::REQUEST_TARGET, HttpParseError::RequestTargetTooLarge).await?;
+    let str = read_string_until_character(stream, b' ', MaximumLength::REQUEST_TARGET,
+        HttpParseError::RequestTargetTooLarge,
+        |b| if syntax::is_request_target_character(b) { Ok(()) } else { Err(HttpParseError::InvalidOctetInRequestTarget) }).await?;
 
     if str == "*" {
         return Ok(RequestTarget::Asterisk);

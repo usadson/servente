@@ -23,6 +23,60 @@ fn is_field_value_character(byte: u8) -> bool {
     abnf::is_visible_character(byte) || validate_obs_text(byte)
 }
 
+/// Is the given character a character that can occur anywhere in the string?
+///
+/// # [HTTP Semantics (RFC 9110) Definitions](https://www.rfc-editor.org/rfc/rfc9110.html#name-uri-references)
+/// ```text
+/// URI-reference = <URI-reference, see [URI], Section 4.1>
+/// absolute-URI  = <absolute-URI, see [URI], Section 4.3>
+/// relative-part = <relative-part, see [URI], Section 4.2>
+/// authority     = <authority, see [URI], Section 3.2>
+/// uri-host      = <host, see [URI], Section 3.2.2>
+/// port          = <port, see [URI], Section 3.2.3>
+/// path-abempty  = <path-abempty, see [URI], Section 3.3>
+/// segment       = <segment, see [URI], Section 3.3>
+/// query         = <query, see [URI], Section 3.4>
+///
+/// absolute-path = 1*( "/" segment )
+/// partial-URI   = relative-part [ "?" query ]
+/// ```
+///
+/// # [HTTP/1.1 (RFC 9112) Definitions](https://www.rfc-editor.org/rfc/rfc9112.html#name-request-target)
+/// ```text
+/// request-target = origin-form
+///                / absolute-form
+///                / authority-form
+///                / asterisk-form
+/// origin-form    = absolute-path [ "?" query ]
+/// absolute-form  = absolute-URI
+/// authority-form = uri-host ":" port
+/// asterisk-form  = "*"
+/// ```
+///
+/// # [URI (RFC 3986) Definitions](https://www.rfc-editor.org/rfc/rfc3986.html)
+/// ```text
+/// absolute-URI  = scheme ":" hier-part [ "?" query ]
+/// [...]
+/// ```
+pub fn is_request_target_character(byte: u8) -> bool {
+    !matches!(byte, 0x00..=0x1F | 0x80..=0xFF)
+}
+
+/// Is the given character a character that can occur (anywhere) in the string?
+/// This is useful for early exits, but use [`validate_token`] after the
+/// token is parsed.
+///
+/// ```text
+/// tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+///                / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+///                / DIGIT / ALPHA
+///                ; any VCHAR, except delimiters
+/// ```
+#[inline]
+pub fn is_token_character(byte: u8) -> bool {
+    validate_token_character(byte).is_ok()
+}
+
 /// Returns whether or not the character is whitespace according to the HTTP
 /// specification. This is in effect just `U+0020 SPACE` and `U+0009 CHARACTER
 /// TABULATION`.
