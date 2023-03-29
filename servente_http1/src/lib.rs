@@ -3,7 +3,7 @@
 
 use tokio::{
     net::{TcpListener, TcpStream},
-    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt, ReadHalf, WriteHalf}, time::Instant,
+    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt, ReadHalf, WriteHalf}, time::{Instant, timeout},
 };
 
 #[cfg(feature = "ktls")]
@@ -29,7 +29,7 @@ use servente_http_handling::{
     finish_response_error,
     finish_response_normal,
     handle_parse_error,
-    handle_request, ServenteConfig,
+    handle_request, ServenteConfig, responses,
 };
 
 use servente_http::{
@@ -81,6 +81,7 @@ pub enum TransferStrategy {
 pub enum ExchangeError {
     MalformedData,
     Http2Upgrade,
+    TimedOut,
     Io(io::Error),
 }
 
@@ -274,7 +275,15 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
     #[cfg(feature = "debugging")]
     let start_full = Instant::now();
 
-    let mut request = match read_request_excluding_body(connection.buf_reader).await {
+    let request = match timeout(config.read_headers_timeout, read_request_excluding_body(connection.buf_reader)).await {
+        Ok(request) => request,
+        Err(_) => {
+            _ = send_response(&mut connection.buf_writer, responses::create_request_timeout().await, None).await;
+            return Err(ExchangeError::TimedOut);
+        }
+    };
+
+    let mut request = match request {
         Ok(request) => request,
         Err(error) => {
             match error {
@@ -300,7 +309,15 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
     }
 
     // TODO some handlers might prefer to read the body themselves.
-    if let Err(error) = read_request_body(connection.buf_reader, &mut request).await {
+    let body_result = match timeout(config.read_body_timeout, read_request_body(connection.buf_reader, &mut request)).await {
+        Ok(body_result) => body_result,
+        Err(_) => {
+            _ = send_response(&mut connection.buf_writer, responses::create_request_timeout().await, None).await;
+            return Err(ExchangeError::TimedOut);
+        }
+    };
+
+    if let Err(error) = body_result {
         match error {
             Error::ParseError(error) => {
                 let mut response = handle_parse_error(error).await;

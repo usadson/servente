@@ -2,7 +2,9 @@
 // All Rights Reserved.
 
 pub mod handler;
+pub mod responses;
 
+use std::time::Duration;
 use std::{
     path::Path,
     sync::Arc,
@@ -18,6 +20,14 @@ use servente_resources::{MediaType, static_resources, CachedFileDetails, cache};
 pub struct ServenteConfig {
     pub tls_config: Arc<rustls::ServerConfig>,
     pub handler_controller: handler::HandlerController,
+
+    /// If the client doesn't transmit the full request-line and headers within
+    /// this time, the request is terminated.
+    pub read_headers_timeout: Duration,
+
+    /// If the client doesn't transmit the full body within
+    /// this time, the request is terminated.
+    pub read_body_timeout: Duration,
 }
 
 unsafe impl Send for ServenteConfig {}

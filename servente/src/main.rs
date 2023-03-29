@@ -12,7 +12,7 @@ use servente_http_handling::{handler, ServenteConfig};
 use servente_resources::cache;
 use tokio::task;
 
-use std::{io, sync::Arc, time::Instant, env::current_dir};
+use std::{io, sync::Arc, time::{Instant, Duration}, env::current_dir};
 
 mod cert;
 mod example_handlers;
@@ -54,6 +54,8 @@ async fn main() -> io::Result<()> {
     let config = ServenteConfig {
         tls_config: Arc::new(tls_config),
         handler_controller,
+        read_headers_timeout: Duration::from_secs(45),
+        read_body_timeout: Duration::from_secs(60),
     };
 
     #[cfg(feature = "http3")]
