@@ -111,16 +111,14 @@ enum CompressIndexCandidate {
     NameIndexed(usize),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Compressor {
 
 }
 
 impl Compressor {
     pub fn new() -> Self {
-        Self {
-
-        }
+        Self::default()
     }
 
     fn find_header(&self, header_name: &HeaderName, header_value: &HeaderValue, header_value_as_str: &str) -> CompressIndexCandidate {

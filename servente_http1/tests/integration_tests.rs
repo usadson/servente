@@ -5,7 +5,7 @@
 
 use std::{
     fs::DirBuilder,
-    time::{Duration, SystemTime},
+    time::Duration,
     sync::Arc, process::{Command, Output},
 };
 
@@ -13,8 +13,7 @@ use servente_http_handling::{ServenteConfig, handler};
 use tokio::{task::AbortHandle, time::{sleep, timeout}};
 
 fn setup_configuration() -> ServenteConfig {
-    let random_name = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos().to_string();
-    let temp_dir = tempdir::TempDir::new(&random_name).unwrap();
+    let temp_dir = tempfile::tempdir().unwrap();
     std::env::set_current_dir(temp_dir.path()).unwrap();
 
     let wwwroot_path = temp_dir.path().join("wwwroot");

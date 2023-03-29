@@ -19,9 +19,9 @@ enum StaticMethod {
     Put,
 }
 
-impl Into<Method> for StaticMethod {
-    fn into(self) -> Method {
-        match self {
+impl From<StaticMethod> for Method {
+    fn from(value: StaticMethod) -> Method {
+        match value {
             StaticMethod::Connect => Method::Connect,
             StaticMethod::Delete => Method::Delete,
             StaticMethod::Get => Method::Get,
