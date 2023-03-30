@@ -280,7 +280,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
     match request_target {
         "/" | "/index" | "/index.html" => {
             if let Some(accepted_languages) = request.headers.get(&HeaderName::AcceptLanguage) {
-                match find_best_match_in_weighted_list(accepted_languages.as_str_no_convert().unwrap(), &["nl", "en"]) {
+                match find_best_match_in_weighted_list(accepted_languages.as_str_no_convert().unwrap(), &["nl", "en"], 0.0) {
                     Some(0) => {
                         response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
                         response.headers.set(HeaderName::ContentLanguage, "nl".into());

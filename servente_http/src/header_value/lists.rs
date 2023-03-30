@@ -80,7 +80,7 @@ impl<'a> Iterator for HttpWeightedListValueIterator<'a> {
 /// returning `None` if no such match could be found and the .
 ///
 /// Assumes a case-sensitive token, for example as for `content-coding`.
-pub fn find_best_match_in_weighted_list(header_field_value: &str, supported_values: &[&str]) -> Option<usize> {
+pub fn find_best_match_in_weighted_list(header_field_value: &str, supported_values: &[&str], default_wildstart_weight: f32) -> Option<usize> {
     let list: Vec<_> = parse_http_weighted_list(header_field_value)
         .collect();
 
@@ -93,7 +93,7 @@ pub fn find_best_match_in_weighted_list(header_field_value: &str, supported_valu
         .filter(|entry| entry.name == "*")
         .take(1)
         .map(|entry| entry.weight)
-        .next().unwrap_or(1.0);
+        .next().unwrap_or(default_wildstart_weight);
 
     let mut best_match: Option<(usize, f32)> = None;
 
@@ -224,7 +224,7 @@ mod tests {
     #[case("*;q=0.0, gzip;q=0.001", &["br", "deflate", "gzip"], Some(2))]
     fn test_find_best_match_in_weighted_list(#[case] input_user_agent: &str,
             #[case] input_server: &[&str], #[case] expected: Option<usize>) {
-        assert_eq!(find_best_match_in_weighted_list(input_user_agent, input_server), expected);
+        assert_eq!(find_best_match_in_weighted_list(input_user_agent, input_server, 1.0), expected);
     }
 
     #[rstest]
