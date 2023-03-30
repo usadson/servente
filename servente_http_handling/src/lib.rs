@@ -365,6 +365,9 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
         _ => Arc::clone(cached.value())
     };
 
+    #[cfg(not(feature = "convert-markdown"))]
+    let cached = Arc::clone(cached.value());
+
     if let Some(modified_date) = cached.modified_date {
         if let Some(not_modified_response) = check_not_modified(request, path, modified_date) {
             return Some(not_modified_response);
