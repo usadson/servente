@@ -26,7 +26,8 @@ tempfile = "*"
 servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
 
 [features]
-debugging = ["convert-markdown"]
+default = ["convert-markdown"]
+debugging = []
 convert-markdown = ["servente_http_handling/convert-markdown"]
 http2 = ["dep:servente_http2"]
 ktls = ["dep:ktls"]

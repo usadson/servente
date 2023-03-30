@@ -9,7 +9,7 @@ use std::{
     sync::Arc, process::{Command, Output},
 };
 
-use servente_http_handling::{ServenteConfig, handler};
+use servente_http_handling::{ServenteConfig, handler, ServenteSettings};
 use tokio::{task::AbortHandle, time::{sleep, timeout}};
 
 fn setup_configuration() -> ServenteConfig {
@@ -33,9 +33,11 @@ fn setup_configuration() -> ServenteConfig {
 
     ServenteConfig {
         tls_config: Arc::new(tls_config),
-        handler_controller,
-        read_headers_timeout: Duration::from_secs(10),
-        read_body_timeout: Duration::from_secs(10),
+        settings: ServenteSettings {
+            handler_controller,
+            read_headers_timeout: Duration::from_secs(10),
+            read_body_timeout: Duration::from_secs(10),
+        },
     }
 }
 

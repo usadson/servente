@@ -16,6 +16,7 @@ servente_http = { version = "*", path = "../servente_http" }
 servente_resources = { version = "*", path = "../servente_resources" }
 
 [features]
+default = ["convert-markdown"]
 debugging = []
 convert-markdown = [
     "servente_resources/convert-markdown"

@@ -8,7 +8,7 @@
 //     clippy::missing_panics_doc
 // )]
 
-use servente_http_handling::{handler, ServenteConfig};
+use servente_http_handling::{handler, ServenteConfig, ServenteSettings};
 use servente_resources::cache;
 use tokio::task;
 
@@ -52,9 +52,11 @@ async fn main() -> io::Result<()> {
 
     let config = ServenteConfig {
         tls_config: Arc::new(tls_config),
-        handler_controller,
-        read_headers_timeout: Duration::from_secs(45),
-        read_body_timeout: Duration::from_secs(60),
+        settings: ServenteSettings {
+            handler_controller,
+            read_headers_timeout: Duration::from_secs(45),
+            read_body_timeout: Duration::from_secs(60),
+        },
     };
 
     #[cfg(feature = "http3")]

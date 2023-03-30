@@ -1291,7 +1291,7 @@ async fn handle_request_inner(mut binary_request: BinaryRequest, dynamic_table: 
             }
         }
     }
-    let mut response = servente_http_handling::handle_request(&request, config.as_ref()).await;
+    let mut response = servente_http_handling::handle_request(&request, &config.settings).await;
     servente_http_handling::finish_response_normal(&request, &mut response).await;
     Ok(response)
 }

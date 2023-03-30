@@ -3,13 +3,13 @@
 
 use tokio::{
     net::{TcpListener, TcpStream},
-    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt, ReadHalf, WriteHalf}, time::{Instant, timeout},
+    task, io::{split, AsyncWriteExt, AsyncReadExt, BufReader, AsyncBufReadExt, BufWriter, AsyncSeekExt}, time::{Instant, timeout},
 };
 
 #[cfg(feature = "ktls")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use tokio_rustls::{TlsAcceptor, server::TlsStream};
+use tokio_rustls::TlsAcceptor;
 
 use std::{
     io::{self, SeekFrom},
@@ -29,7 +29,7 @@ use servente_http_handling::{
     finish_response_error,
     finish_response_normal,
     handle_parse_error,
-    handle_request, ServenteConfig, responses,
+    handle_request, ServenteConfig, responses, ServenteSettings,
 };
 
 use servente_http::{
@@ -151,16 +151,6 @@ impl AsyncWrite for StreamWrapper {
     }
 }
 
-
-#[cfg(not(feature = "ktls"))]
-type StreamWrapper = TlsStream<TcpStream>;
-
-/// Represents a single connection.
-struct Connection<'a> {
-    buf_reader: &'a mut BufReader<ReadHalf<StreamWrapper>>,
-    buf_writer: &'a mut BufWriter<WriteHalf<StreamWrapper>>,
-}
-
 /// Consume a `U+000D CARRIAGE RETURN` character (CR) and a `U+000A LINE FEED`
 /// character (LF) from the stream.
 async fn consume_crlf<R>(stream: &mut R) -> Result<(), Error>
@@ -271,14 +261,16 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
 
 /// Reads a single response, handles it and sends the response back to the
 /// client.
-async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteConfig) -> Result<(), ExchangeError> {
+async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, settings: &ServenteSettings) -> Result<(), ExchangeError>
+        where R: AsyncBufReadExt + Unpin,
+              W: AsyncWriteExt + Unpin {
     #[cfg(feature = "debugging")]
     let start_full = Instant::now();
 
-    let request = match timeout(config.read_headers_timeout, read_request_excluding_body(connection.buf_reader)).await {
+    let request = match timeout(settings.read_headers_timeout, read_request_excluding_body(reader)).await {
         Ok(request) => request,
         Err(_) => {
-            _ = send_response(&mut connection.buf_writer, responses::create_request_timeout().await, None).await;
+            _ = send_response(writer, responses::create_request_timeout().await, None).await;
             return Err(ExchangeError::TimedOut);
         }
     };
@@ -290,7 +282,7 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
                 Error::ParseError(error) => {
                     let mut response = handle_parse_error(error).await;
                     finish_response_error(&mut response).await;
-                    send_response(connection.buf_writer, response, None).await?;
+                    send_response(writer, response, None).await?;
                     return Err(ExchangeError::MalformedData);
                 }
                 Error::Other(error) => {
@@ -305,14 +297,14 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
     // server to know that it contains a body using `Content-Length` or a
     // related mechanism, but it actually does.
     if request.method == Method::Pri {
-        return handle_pri_method(connection, request).await;
+        return handle_pri_method(reader, writer, request).await;
     }
 
     // TODO some handlers might prefer to read the body themselves.
-    let body_result = match timeout(config.read_body_timeout, read_request_body(connection.buf_reader, &mut request)).await {
+    let body_result = match timeout(settings.read_body_timeout, read_request_body(reader, &mut request)).await {
         Ok(body_result) => body_result,
         Err(_) => {
-            _ = send_response(&mut connection.buf_writer, responses::create_request_timeout().await, None).await;
+            _ = send_response(writer, responses::create_request_timeout().await, None).await;
             return Err(ExchangeError::TimedOut);
         }
     };
@@ -322,7 +314,7 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
             Error::ParseError(error) => {
                 let mut response = handle_parse_error(error).await;
                 finish_response_error(&mut response).await;
-                send_response(connection.buf_writer, response, None).await?;
+                send_response(writer, response, None).await?;
                 return Err(ExchangeError::MalformedData);
             }
             Error::Other(error) => {
@@ -333,7 +325,7 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
 
     #[cfg(feature = "debugging")]
     let start_handling = Instant::now();
-    let mut response = handle_request(&request, config).await;
+    let mut response = handle_request(&request, settings).await;
     finish_response_normal(&request, &mut response).await;
 
     if let Some(BodyKind::File { metadata, .. }) = &response.body {
@@ -347,18 +339,18 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
             }
 
             finish_response_error(&mut response).await;
-            send_response(connection.buf_writer, response, None).await?;
+            send_response(writer, response, None).await?;
 
             return Ok(());
         }
     }
 
     for response in response.prelude_response {
-        send_response(connection.buf_writer, response, None).await?;
+        send_response(writer, response, None).await?;
     }
     response.prelude_response = Vec::new();
 
-    let sent_body = send_response(connection.buf_writer, response,
+    let sent_body = send_response(writer, response,
         request.headers.get(&HeaderName::Range)
                 .and_then(|range| range.as_str_no_convert())
                 .and_then(HttpRangeList::parse)
@@ -378,9 +370,11 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
 /// ```text
 /// PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n
 /// ```
-async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request) -> Result<(), ExchangeError> {
+async fn handle_pri_method<R, W>(reader: &mut R, writer: &mut W, request: Request) -> Result<(), ExchangeError>
+        where R: AsyncBufReadExt + Unpin,
+              W: AsyncWriteExt + Unpin {
     let mut buf: [u8; 8] = [0; 8];
-    connection.buf_reader.read_exact(&mut buf).await?;
+    reader.read_exact(&mut buf).await?;
 
     if &buf[..] != b"\r\nSM\r\n\r\n" {
         #[cfg(feature = "debugging")]
@@ -390,7 +384,7 @@ async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request
             "Invalid HTTP/2 PRI upgrade body");
         response.headers.set(HeaderName::Connection, "close".into());
         finish_response_error(&mut response).await;
-        send_response(connection.buf_writer, response, None).await?;
+        send_response(writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
     }
 
@@ -399,7 +393,7 @@ async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request
                 "Invalid HTTP upgrade using PRI: expected version HTTP/2.0");
         response.headers.set(HeaderName::Connection, "close".into());
         finish_response_error(&mut response).await;
-        send_response(connection.buf_writer, response, None).await?;
+        send_response(writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
     }
 
@@ -409,7 +403,7 @@ async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request
             "Invalid preface start request");
         response.headers.set(HeaderName::Connection, "close".into());
         finish_response_error(&mut response).await;
-        send_response(connection.buf_writer, response, None).await?;
+        send_response(writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
     }
 
@@ -419,11 +413,12 @@ async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request
     return Err(ExchangeError::Http2Upgrade);
 
     #[cfg(not(feature = "http2"))]
-    return handle_pri_method_http2_not_enabled(connection).await;
+    return handle_pri_method_http2_not_enabled(writer).await;
 }
 
 #[cfg(not(feature = "http2"))]
-async fn handle_pri_method_http2_not_enabled<'a>(connection: &mut Connection<'a>) -> Result<(), ExchangeError> {
+async fn handle_pri_method_http2_not_enabled<W>(writer: &mut W) -> Result<(), ExchangeError>
+        where W: AsyncWriteExt + Unpin {
     const FRAME_HTTP_1_1_REQUIRED: &'static [u8; 35] = &[
         // Settings Acknowledge
         0x00, 0x00, 0x00,       // length = 0
@@ -446,7 +441,7 @@ async fn handle_pri_method_http2_not_enabled<'a>(connection: &mut Connection<'a>
         0x0d, 0x00, 0x00, 0x00, // error code = 0x0d HTTP_1_1_REQUIRED
     ];
 
-    connection.buf_writer.write_all(FRAME_HTTP_1_1_REQUIRED).await?;
+    writer.write_all(FRAME_HTTP_1_1_REQUIRED).await?;
     Err(ExchangeError::MalformedData)
 }
 
@@ -495,13 +490,8 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
     let mut reader = BufReader::new(reader);
     let mut writer = BufWriter::new(writer);
 
-    let mut connection = Connection {
-        buf_reader: &mut reader,
-        buf_writer: &mut writer,
-    };
-
     loop {
-        if let Err(e) = handle_exchange(&mut connection, &config).await {
+        if let Err(e) = handle_exchange(&mut reader, &mut writer, &config.settings).await {
             #[cfg(feature = "http2")]
             if let ExchangeError::Http2Upgrade = e {
                 servente_http2::handle_client(reader, writer, std::sync::Arc::new(config)).await;
@@ -945,9 +935,25 @@ async fn transfer_body_ranges<O, I>(output: &mut O, input: &mut I, ranges: HttpR
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use rstest::rstest;
 
-    use servente_http::*;
+    use super::*;
+    use servente_http_handling::{handler::HandlerController, ServenteSettings};
+
+    /// The connection preface, as defined in [RFC 9113 Section 3.4](https://www.rfc-editor.org/rfc/rfc9113.html#name-http-2-connection-preface).
+    #[allow(dead_code)] // Linting doesn't understand that this is used in tests :(
+    const HTTP2_CONNECTION_PREFACE: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+
+    lazy_static::lazy_static! {
+        //static ref HUFFMAN_TREE: Box<BinaryTreeNode> = BinaryTreeNode::construct(HUFFMAN_CODE);
+        static ref SETTINGS: ServenteSettings = ServenteSettings {
+            handler_controller: HandlerController::new(),
+            read_headers_timeout: Duration::from_secs(5),
+            read_body_timeout: Duration::from_secs(5),
+        };
+    }
 
     #[tokio::test]
     async fn read_request_line_normal() {
@@ -996,5 +1002,57 @@ mod tests {
         let headers = super::read_headers(&mut stream).await;
         assert!(headers.is_err());
         assert!(matches!(headers.err().unwrap(), Error::ParseError(e) if e == expected));
+    }
+
+    #[cfg(feature = "http2")]
+    #[tokio::test]
+    async fn http2_upgrade_read_request_line() {
+        let mut data = std::io::Cursor::new(HTTP2_CONNECTION_PREFACE);
+        let (method, request_target, version) = read_request_line(&mut data).await.unwrap();
+        assert_eq!(method, Method::Pri);
+        assert_eq!(request_target, RequestTarget::Asterisk);
+        assert_eq!(version, HttpVersion::Http2);
+        assert_eq!(data.position() as usize, b"PRI * HTTP/2.0\r\n".len());
+    }
+
+    #[cfg(feature = "http2")]
+    #[tokio::test]
+    async fn http2_upgrade_read_request_excluding_body() {
+        let mut data = std::io::Cursor::new(HTTP2_CONNECTION_PREFACE);
+        let request = read_request_excluding_body(&mut data).await.unwrap();
+        assert_eq!(request.method, Method::Pri);
+        assert_eq!(request.target, RequestTarget::Asterisk);
+        assert_eq!(request.version, HttpVersion::Http2);
+        assert!(request.headers.is_empty());
+        assert_eq!(data.position() as usize, b"PRI * HTTP/2.0\r\n".len());
+    }
+
+    #[cfg(feature = "http2")]
+    #[tokio::test]
+    async fn http2_upgrade_handle_pri_method() {
+        const DATA: &[u8] = b"\r\nSM\r\n\r\n";
+        let mut data = std::io::Cursor::new(DATA);
+        let mut writer = Vec::new();
+        let request = Request {
+            method: Method::Pri,
+            target: RequestTarget::Asterisk,
+            version: HttpVersion::Http2,
+            headers: HeaderMap::new(),
+            body: None,
+        };
+        let exchange_error = handle_pri_method(&mut data, &mut writer, request).await.unwrap_err();
+        assert_eq!(data.position() as usize, DATA.len());
+        assert_eq!(writer, Vec::new());
+        assert!(matches!(exchange_error, ExchangeError::Http2Upgrade), "Invalid error: {exchange_error:#?} written: {}", String::from_utf8_lossy(writer.as_slice()));
+    }
+
+    #[cfg(feature = "http2")]
+    #[tokio::test]
+
+    async fn http2_upgrade_handle_exchange() {
+        let mut data = std::io::Cursor::new(HTTP2_CONNECTION_PREFACE);
+        let mut writer = Vec::new();
+        let exchange_error = handle_exchange(&mut data, &mut writer, &SETTINGS).await.unwrap_err();
+        assert!(matches!(exchange_error, ExchangeError::Http2Upgrade), "Invalid error: {exchange_error:#?} written: {}", String::from_utf8_lossy(writer.as_slice()));
     }
 }

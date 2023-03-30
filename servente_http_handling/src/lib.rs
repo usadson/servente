@@ -19,6 +19,11 @@ use servente_resources::{MediaType, static_resources, CachedFileDetails, cache};
 #[derive(Clone)]
 pub struct ServenteConfig {
     pub tls_config: Arc<rustls::ServerConfig>,
+    pub settings: ServenteSettings,
+}
+
+#[derive(Clone)]
+pub struct ServenteSettings {
     pub handler_controller: handler::HandlerController,
 
     /// If the client doesn't transmit the full request-line and headers within
@@ -125,12 +130,12 @@ pub async fn finish_response_normal(request: &Request, response: &mut Response) 
 ///
 /// # References
 /// * [RFC 9110 Section 9.3.7](https://www.rfc-editor.org/rfc/rfc9110.html#name-options)
-async fn handle_options(request: &Request, config: &ServenteConfig) -> Response {
+async fn handle_options(request: &Request, settings: &ServenteSettings) -> Response {
     if request.target == RequestTarget::Asterisk {
         return handle_options_asterisk();
     }
 
-    if let Some(response) = config.handler_controller.check_handle_options(request) {
+    if let Some(response) = settings.handler_controller.check_handle_options(request) {
         return response;
     }
 
@@ -166,9 +171,9 @@ pub async fn handle_parse_error(error: HttpParseError) -> Response {
 }
 
 /// Handles a request.
-pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Response {
+pub async fn handle_request(request: &Request, settings: &ServenteSettings) -> Response {
     if request.method == Method::Options {
-        return handle_options(request, config).await;
+        return handle_options(request, settings).await;
     }
 
     // Method is not OPTIONS, so a request-target of "*" is not allowed anymore.
@@ -176,7 +181,7 @@ pub async fn handle_request(request: &Request, config: &ServenteConfig) -> Respo
         return Response::with_status_and_string_body(StatusCode::BadRequest, "Invalid Target");
     }
 
-    let controller = config.handler_controller.clone();
+    let controller = settings.handler_controller.clone();
     if let Some(result) = controller.check_handle(request) {
         return match result {
             Ok(res) => res,
