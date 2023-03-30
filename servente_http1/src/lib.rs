@@ -379,10 +379,10 @@ async fn handle_exchange<'a>(connection: &mut Connection<'a>, config: &ServenteC
 /// PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n
 /// ```
 async fn handle_pri_method<'a>(connection: &mut Connection<'a>, request: Request) -> Result<(), ExchangeError> {
-    let mut buf: [u8; 6] = [0; 6];
+    let mut buf: [u8; 8] = [0; 8];
     connection.buf_reader.read_exact(&mut buf).await?;
 
-    if &buf[..] != b"SM\r\n\r\n" {
+    if &buf[..] != b"\r\nSM\r\n\r\n" {
         #[cfg(feature = "debugging")]
         println!("[HTTP/2] [PRI Upgrade] Invalid body: {:?}", buf);
 
@@ -655,7 +655,11 @@ async fn read_request_body_chunked<R>(_stream: &mut R) -> Result<BodyKind, Error
 async fn read_request_excluding_body<R>(stream: &mut R) -> Result<Request, Error>
         where R: AsyncBufReadExt + Unpin {
     let (method, target, version) = read_request_line(stream).await?;
-    let headers = read_headers(stream).await?;
+    let headers = if version == HttpVersion::Http2 {
+        HeaderMap::new()
+    } else {
+        read_headers(stream).await?
+    };
     Ok(Request { method, target, version, headers, body: None })
 }
 
