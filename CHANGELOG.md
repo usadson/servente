@@ -11,13 +11,22 @@ All notable changes to this project will be documented in this file.
   webserver-related conformance and best practices.
 - Add validation for request header field values ([RFC 9110 Section 5.5](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.5)).
 - Add recommended `pre-push` Git hook for running **Clippy** before pushing.
+- Added tools to unify common code for working with HTTP Lists (`#rule`s)
+- Validate `method` and `request-target` for *HTTP/1.x*
+- Added read timeouts for *HTTP/1.x* to prevent some **Denial of Service**s
+- Added integration tests for *HTTP/1.x* using **cURL**.
 
 ### Changed
 - Restructure repository for multi-crate config (Cargo workspace)
+- Methods are now **case-sensitive**, as this conforms to the spec
+  ([RFC 9110 Section 9.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.1-5))
 
 ### Fixed
 - **ALPN** and **`Alt-Svc`** weren't based on feature detection, so for example
   HTTP/2 would be listed on there, but wouldn't actually be available.
+- Broken `Accept-Language` parsing for welcome pages
+- Broken **HTTP/2** upgrade, this is now tested
+- Failing builds for builds without the `convert-markdown` feature flag
 
 ## [0.2.0](https://github.com/usadson/servente/releases/tag/v0.2.0) - 2023-03-26
 Beta build with support for HTTP/2 and caching.
