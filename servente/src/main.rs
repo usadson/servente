@@ -16,8 +16,18 @@ use std::{io, sync::Arc, time::{Instant, Duration}, env::current_dir};
 
 mod example_handlers;
 
+#[cfg(not(feature = "io_uring"))]
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    begin().await
+}
+
+#[cfg(feature = "io_uring")]
+fn main() -> io::Result<()> {
+    tokio_uring::start(begin())
+}
+
+async fn begin() -> io::Result<()> {
     let start = Instant::now();
 
     let wwwroot_path = current_dir().unwrap().join("wwwroot");

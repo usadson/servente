@@ -15,6 +15,7 @@ rustls-pemfile = "*"
 strum_macros = "*"
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
+tokio-uring = { version = "*", optional = true }
 phf = { version = "*", features = ["macros", "unicase"] }
 unicase = "*"
 
@@ -63,6 +64,11 @@ debugging = [
     "servente_http2?/debugging",
     "servente_http3?/debugging",
     "servente_resources/debugging",
+]
+
+io_uring = [
+    "dep:tokio-uring",
+    "servente_http1/io_uring",
 ]
 
 # WIP: Kernel TLS support (for `sendfile`)
