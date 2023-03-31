@@ -14,6 +14,7 @@ use tokio_rustls::TlsAcceptor;
 use std::{
     io::{self, SeekFrom},
     mem::swap,
+    sync::Arc,
     time::Duration,
 };
 
@@ -500,7 +501,7 @@ async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
         }
     }
 
-    let acceptor = TlsAcceptor::from(config.tls_config.clone());
+    let acceptor = TlsAcceptor::from(Arc::clone(&config.tls_config));
     let stream = match acceptor.accept(stream).await {
         Ok(stream) => stream,
         Err(_) => return,
@@ -856,7 +857,7 @@ pub async fn start(address: &str, config: ServenteConfig) -> io::Result<()> {
         };
         let config = config.clone();
         task::spawn(async move {
-            process_socket(stream, config.clone()).await;
+            process_socket(stream, config).await;
         });
     }
 }

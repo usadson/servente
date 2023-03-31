@@ -1335,7 +1335,7 @@ async fn handle_request(request_in_transit: RequestInTransit, sender: tokio::syn
 async fn handle_request_inner(mut request_in_transit: RequestInTransit, dynamic_table: Arc<Mutex<DynamicTable>>, config: Arc<ServenteConfig>) -> Result<Response, RequestError> {
     let data = std::mem::take(&mut request_in_transit.body);
 
-    let mut request = request_in_transit.headers.decode(dynamic_table.clone()).await?;
+    let mut request = request_in_transit.headers.decode(Arc::clone(&dynamic_table)).await?;
     if !request_in_transit.trailers.headers.is_empty() {
         request_in_transit.trailers.decode_trailers(&mut request, dynamic_table).await?;
     }

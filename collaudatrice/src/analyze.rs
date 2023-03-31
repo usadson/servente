@@ -1,7 +1,10 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::net::SocketAddr;
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+};
 
 use anyhow::{bail, anyhow};
 use tokio::{net::TcpStream, io::{AsyncWriteExt, AsyncReadExt, BufReader}};
@@ -77,7 +80,7 @@ pub async fn analyze_server(config: &Configuration) -> anyhow::Result<ServerAnal
 async fn find_server_product_name(config: &Configuration, address: SocketAddr) -> anyhow::Result<String> {
     let stream = TcpStream::connect(address).await?;
 
-    let mut connection = tokio_rustls::TlsConnector::from(config.rustls_client_config.clone())
+    let mut connection = tokio_rustls::TlsConnector::from(Arc::clone(&config.rustls_client_config))
             .connect(rustls::ServerName::try_from(config.args.host.as_ref())?, stream).await?;
 
 
