@@ -12,7 +12,7 @@ use servente_http_handling::{handler, ServenteConfig, ServenteSettings};
 use servente_resources::cache;
 use tokio::task;
 
-use std::{io, sync::Arc, time::{Instant, Duration}, env::current_dir};
+use std::{io, time::{Instant, Duration}, env::current_dir};
 
 mod example_handlers;
 
@@ -32,36 +32,43 @@ async fn begin() -> io::Result<()> {
 
     let wwwroot_path = current_dir().unwrap().join("wwwroot");
 
-    let cert_data = servente_self_signed_cert::load_certificate_locations();
 
-    let mut tls_config = rustls::ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth()
-        .with_single_cert(cert_data.certs, cert_data.private_key)
-        .expect("Failed to build rustls configuration!");
+    #[cfg(feature = "rustls")]
+    let tls_config = {
+        let cert_data = servente_self_signed_cert::load_certificate_locations();
 
-    // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
-    tls_config.alpn_protocols = vec![
-        #[cfg(feature = "http3")]
-        b"h3".to_vec(),
+        let mut tls_config = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(cert_data.certs, cert_data.private_key)
+            .expect("Failed to build rustls configuration!");
 
-        #[cfg(feature = "http2")]
-        b"h2".to_vec(),
+        // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
+        tls_config.alpn_protocols = vec![
+            #[cfg(feature = "http3")]
+            b"h3".to_vec(),
 
-        b"http/1.1".to_vec()
-    ];
-    tls_config.send_half_rtt_data = true;
+            #[cfg(feature = "http2")]
+            b"h2".to_vec(),
 
-    #[cfg(feature = "ktls")]
-    {
-        tls_config.enable_secret_extraction = true;
-    }
+            b"http/1.1".to_vec()
+        ];
+        tls_config.send_half_rtt_data = true;
+
+        #[cfg(feature = "ktls")]
+        {
+            tls_config.enable_secret_extraction = true;
+        }
+
+        tls_config
+    };
 
     let mut handler_controller = handler::HandlerController::new();
     example_handlers::register(&mut handler_controller);
 
     let config = ServenteConfig {
-        tls_config: Arc::new(tls_config),
+        #[cfg(feature = "rustls")]
+        tls_config: std::sync::Arc::new(tls_config),
         settings: ServenteSettings {
             handler_controller,
             read_headers_timeout: Duration::from_secs(45),

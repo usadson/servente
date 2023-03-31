@@ -9,12 +9,15 @@ use tokio::{
 #[cfg(feature = "ktls")]
 use tokio::io::{AsyncRead, AsyncWrite};
 
+#[cfg(feature = "rustls")]
 use tokio_rustls::TlsAcceptor;
+
+#[cfg(feature = "rustls")]
+use std::sync::Arc;
 
 use std::{
     io::{self, SeekFrom},
     mem::swap,
-    sync::Arc,
     time::Duration,
 };
 
@@ -480,31 +483,37 @@ async fn handle_pri_method_http2_not_enabled<W>(writer: &mut W) -> Result<(), Ex
 }
 
 /// Process a single socket connection.
-async fn process_socket(mut stream: TcpStream, config: ServenteConfig) {
+async fn process_socket(stream: TcpStream, config: ServenteConfig) {
     //println!("Client connected: {}", stream.peer_addr().unwrap());
-    let mut buf = [0u8; 4];
-    if let Ok(length) = stream.peek(&mut buf).await {
-        if length >= 3 && &buf[0..3] == b"GET" {
-            if let Err(e) = discard_request(&mut stream).await {
-                #[cfg(feature = "debugging")]
-                println!("Client Error discarding non-HTTPS: {:?}", e);
 
-                #[cfg(not(feature = "debugging"))]
-                { _ = e }
-                return;
-            }
+    #[cfg(feature = "rustls")]
+    let stream = {
+        let mut stream = stream;
+        let mut buf = [0u8; 4];
 
-            if send_http_upgrade(&mut stream).await.is_err() {
-                _ = stream.shutdown().await;
-                return;
+        if let Ok(length) = stream.peek(&mut buf).await {
+            if length >= 3 && &buf[0..3] == b"GET" {
+                if let Err(e) = discard_request(&mut stream).await {
+                    #[cfg(feature = "debugging")]
+                    println!("Client Error discarding non-HTTPS: {:?}", e);
+
+                    #[cfg(not(feature = "debugging"))]
+                    { _ = e }
+                    return;
+                }
+
+                if send_http_upgrade(&mut stream).await.is_err() {
+                    _ = stream.shutdown().await;
+                    return;
+                }
             }
         }
-    }
 
-    let acceptor = TlsAcceptor::from(Arc::clone(&config.tls_config));
-    let stream = match acceptor.accept(stream).await {
-        Ok(stream) => stream,
-        Err(_) => return,
+        let acceptor = TlsAcceptor::from(Arc::clone(&config.tls_config));
+        match acceptor.accept(stream).await {
+            Ok(stream) => stream,
+            Err(_) => return,
+        }
     };
 
     #[cfg(feature = "ktls")]

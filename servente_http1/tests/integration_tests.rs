@@ -6,7 +6,7 @@
 use std::{
     fs::DirBuilder,
     time::Duration,
-    sync::Arc, process::{Command, Output},
+    process::{Command, Output},
 };
 
 use servente_http_handling::{ServenteConfig, handler, ServenteSettings};
@@ -19,20 +19,26 @@ fn setup_configuration() -> ServenteConfig {
     let wwwroot_path = temp_dir.path().join("wwwroot");
     DirBuilder::new().create(&wwwroot_path).unwrap();
 
-    let cert_data = servente_self_signed_cert::load_certificate_locations();
 
-    let mut tls_config = rustls::ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth()
-        .with_single_cert(cert_data.certs, cert_data.private_key)
-        .expect("Failed to build rustls configuration!");
+    #[cfg(feature = "rustls")]
+    let tls_config = {
+        let cert_data = servente_self_signed_cert::load_certificate_locations();
+        let mut tls_config = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(cert_data.certs, cert_data.private_key)
+            .expect("Failed to build rustls configuration!");
 
-    tls_config.alpn_protocols = vec!["http/1.1".into()];
+        tls_config.alpn_protocols = vec!["http/1.1".into()];
+
+        tls_config
+    };
 
     let handler_controller = handler::HandlerController::new();
 
     ServenteConfig {
-        tls_config: Arc::new(tls_config),
+        #[cfg(feature = "rustls")]
+        tls_config: std::sync::Arc::new(tls_config),
         settings: ServenteSettings {
             handler_controller,
             read_headers_timeout: Duration::from_secs(10),

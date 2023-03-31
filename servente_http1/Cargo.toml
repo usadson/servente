@@ -9,9 +9,9 @@ hashbrown = "*"
 itertools = "*"
 ktls = { version = "*", optional = true }
 lazy_static = "*"
-rustls = { version = "*", features = ["quic", "secret_extraction"] }
+rustls = { version = "*", features = ["quic", "secret_extraction"], optional = true }
 tokio = { version = "*", features = ["full"] }
-tokio-rustls = "*"
+tokio-rustls = { version = "*", optional = true }
 tokio-uring = { version = "*", optional = true }
 
 
@@ -35,3 +35,7 @@ io_uring = [
     "dep:tokio-uring",
 ]
 ktls = ["dep:ktls"]
+rustls = [
+    "dep:rustls",
+    "dep:tokio-rustls",
+]

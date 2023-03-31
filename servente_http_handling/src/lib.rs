@@ -18,6 +18,7 @@ use servente_resources::{MediaType, static_resources, CachedFileDetails, cache};
 
 #[derive(Clone)]
 pub struct ServenteConfig {
+    #[cfg(feature = "rustls")]
     pub tls_config: Arc<rustls::ServerConfig>,
     pub settings: ServenteSettings,
 }

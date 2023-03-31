@@ -24,6 +24,7 @@ use tokio::{
     task::JoinHandle,
 };
 
+#[cfg(feature = "rustls")]
 use tokio_rustls::server::TlsStream;
 
 use servente_http_handling::ServenteConfig;
@@ -33,8 +34,14 @@ use self::hpack::DynamicTable;
 mod bits;
 pub mod hpack;
 
-type Reader = BufReader<ReadHalf<TlsStream<TcpStream>>>;
-type Writer = BufWriter<WriteHalf<TlsStream<TcpStream>>>;
+#[cfg(not(feature = "rustls"))]
+type StreamType = TcpStream;
+
+#[cfg(feature = "rustls")]
+type StreamType = TlsStream<TcpStream>;
+
+type Reader = BufReader<ReadHalf<StreamType>>;
+type Writer = BufWriter<WriteHalf<StreamType>>;
 
 /// I *would* use an enum for this in C-like languages, but Rust explicitly
 /// considers illegal enum descriminants as undefined behavior, so I'll just use

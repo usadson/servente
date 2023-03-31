@@ -8,9 +8,9 @@ version.workspace = true
 hashbrown = "*"
 itertools = "*"
 lazy_static = "*"
-rustls = { version = "*", features = ["quic", "secret_extraction"] }
+rustls = { version = "*", features = ["quic", "secret_extraction"], optional = true }
 tokio = { version = "*", features = ["full"] }
-tokio-rustls = "*"
+tokio-rustls = { version = "*", optional = true }
 
 
 servente_http = { version = "*", path = "../servente_http" }
@@ -23,4 +23,8 @@ rstest = "*"
 
 [features]
 debugging = []
+rustls = [
+    "dep:rustls",
+    "dep:tokio-rustls",
+]
 server_push = []
