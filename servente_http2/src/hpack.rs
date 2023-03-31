@@ -943,7 +943,7 @@ impl HpackDecodeSink for HpackDecodeSinkHeaders {
     }
 }
 
-pub(super) async fn decode_hpack_header_section(request: super::BinaryRequest, dynamic_table: Arc<Mutex<DynamicTable>>) -> Result<Request, DecompressionError> {
+pub(super) async fn decode_hpack_header_section(request: super::HeadersInTransit, dynamic_table: Arc<Mutex<DynamicTable>>) -> Result<Request, DecompressionError> {
     let mut sink = HpackDecodeSinkHeaders::default();
     let sink_reference = &mut sink;
     decode_hpack_sink(request, dynamic_table, sink_reference).await?;
@@ -969,7 +969,7 @@ pub(super) async fn decode_hpack_header_section(request: super::BinaryRequest, d
     })
 }
 
-async fn decode_hpack_sink<S>(mut request: super::BinaryRequest, dynamic_table: Arc<Mutex<DynamicTable>>, sink: &mut S) -> Result<(), DecompressionError>
+async fn decode_hpack_sink<S>(mut request: super::HeadersInTransit, dynamic_table: Arc<Mutex<DynamicTable>>, sink: &mut S) -> Result<(), DecompressionError>
         where S: HpackDecodeSink {
     let mut dynamic_table = dynamic_table.lock_owned().await;
 
@@ -1191,12 +1191,12 @@ impl<'a> HpackDecodeSink for HpackDecodeSinkTrailers<'a> {
     }
 }
 
-pub(super) async fn decode_hpack_tailer_section(binary_request: super::BinaryRequest,
+pub(super) async fn decode_hpack_tailer_section(headers_in_transit: super::HeadersInTransit,
         dynamic_table: Arc<Mutex<DynamicTable>>,
         request: &mut Request) -> Result<(), DecompressionError> {
     let mut sink = HpackDecodeSinkTrailers{ request };
 
-    decode_hpack_sink(binary_request, dynamic_table, &mut sink).await?;
+    decode_hpack_sink(headers_in_transit, dynamic_table, &mut sink).await?;
 
     Ok(())
 }
@@ -1480,7 +1480,7 @@ mod tests {
     use rstest::rstest;
 
     use servente_http::{RequestTarget, HttpVersion};
-    use crate::BinaryRequest;
+    use crate::HeadersInTransit;
 
     use super::*;
 
@@ -1694,12 +1694,12 @@ mod tests {
     #[rstest]
     #[case("www.example.com", &[0x8c, 0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff])]
     #[test]
-    fn test_binary_request_read_string(#[case] expected: &str, #[case] input: &[u8]) {
-        let mut binary_request = BinaryRequest {
+    fn test_headers_in_transit_read_string(#[case] expected: &str, #[case] input: &[u8]) {
+        let mut headers_in_transit = HeadersInTransit {
             headers: vec![Vec::from(input)],
             cursor: 0,
         };
-        assert_eq!(binary_request.read_string().as_deref(), Some(expected));
+        assert_eq!(headers_in_transit.read_string().as_deref(), Some(expected));
     }
 
     /// A test for the HPACK example C.4.1. First Request
@@ -1736,7 +1736,7 @@ mod tests {
             0xf1, 0xe3, 0xc2, 0xe5, 0xf2, 0x3a, 0x6b, 0xa0, 0xab, 0x90, 0xf4, 0xff
         ];
         let dynamic_table = Arc::new(Mutex::new(DynamicTable::new(4096)));
-        let request = BinaryRequest {
+        let request = HeadersInTransit {
             headers: vec![data],
             cursor: 0,
         };
@@ -1755,7 +1755,7 @@ mod tests {
             0xbc, 0xea, 0xe0, 0x53, 0x03, 0x2a, 0x2f, 0x2a
         ];
         let dynamic_table = Arc::new(Mutex::new(DynamicTable::new(4096)));
-        let request = BinaryRequest {
+        let request = HeadersInTransit {
             headers: vec![data],
             cursor: 0,
         };

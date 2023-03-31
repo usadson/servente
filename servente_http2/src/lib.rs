@@ -71,7 +71,7 @@ const SETTINGS_NO_RFC7540_PRIORITIES: u16 = 0x00_09;
 
 const SETTINGS_TLS_RENEG_PERMITTED: u16 = 0x00_10;
 
-struct BinaryRequest {
+struct HeadersInTransit {
     /// A list of all the header data, first should be from the HEADERS frame,
     /// optionally the others from CONTINUATION frames.
     headers: Vec<Vec<u8>>,
@@ -85,12 +85,12 @@ struct RequestInTransit {
     /// response should be sent to.
     stream_id: StreamId,
 
-    headers: BinaryRequest,
-    trailers: BinaryRequest,
+    headers: HeadersInTransit,
+    trailers: HeadersInTransit,
     body: Vec<Vec<u8>>,
 }
 
-impl BinaryRequest {
+impl HeadersInTransit {
     #[inline]
     pub async fn decode(self, dynamic_table: Arc<Mutex<DynamicTable>>) -> Result<Request, RequestError> {
         hpack::decode_hpack_header_section(self, dynamic_table).await.map_err(RequestError::CompressionError)
@@ -1173,21 +1173,21 @@ async fn handle_frame(connection: &mut Connection, frame: Frame, concurrent_cont
                 return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("New stream IDs must be greater than all the previous initiated streams") });
             }
 
-            let mut binary_request = BinaryRequest { headers: vec![payload], cursor: 0 };
+            let mut headers_in_transit = HeadersInTransit { headers: vec![payload], cursor: 0 };
             while connection.continuation.is_some() {
                 #[cfg(feature = "debugging")]
                 println!("Waiting for continuation...");
                 let frame = connection.read_frame().await?;
                 debug_assert!(frame.frame_type() == FRAME_TYPE_CONTINUATION);
                 if let Frame::Continuation { payload, .. } = frame {
-                    binary_request.headers.push(payload);
+                    headers_in_transit.headers.push(payload);
                 }
             }
 
             let request_in_transit = RequestInTransit{
                 stream_id,
-                headers: binary_request,
-                trailers: BinaryRequest{ headers: Vec::new(), cursor: 0 },
+                headers: headers_in_transit,
+                trailers: HeadersInTransit{ headers: Vec::new(), cursor: 0 },
                 body: Vec::new()
             };
 
