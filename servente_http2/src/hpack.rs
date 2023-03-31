@@ -1343,7 +1343,7 @@ impl<'a> Drop for BitWriter<'a> {
     }
 }
 
-pub(super) fn decode_huffman(input: &[u8]) -> Option<String> {
+pub fn decode_huffman(input: &[u8]) -> Option<String> {
     let mut output = Vec::new();
 
     let mut current_number = 0;

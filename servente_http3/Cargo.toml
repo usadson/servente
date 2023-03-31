@@ -5,6 +5,8 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
+async-trait = "*"
+bytes = "*"
 hashbrown = "*"
 itertools = "*"
 lazy_static = "*"
@@ -15,6 +17,7 @@ tokio-rustls = "*"
 
 servente_common = { version = "*", path = "../servente_common" }
 servente_http = { version = "*", path = "../servente_http" }
+servente_http2 = { version = "*", path = "../servente_http2" }
 servente_http_handling = { version = "*", path = "../servente_http_handling" }
 
 [dev-dependencies]
