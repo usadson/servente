@@ -290,6 +290,7 @@ dependencies = [
  "clap",
  "crossbeam-deque",
  "crossbeam-queue",
+ "futures",
  "owo-colors",
  "rustls",
  "rustls-native-certs",

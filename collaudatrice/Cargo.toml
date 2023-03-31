@@ -9,6 +9,7 @@ anyhow = { version = "*", features = ["backtrace"]}
 clap = { version = "*", features = ["derive"] }
 crossbeam-deque = "*"
 crossbeam-queue = "*"
+futures = "*"
 owo-colors = "*"
 rustls = { version = "*", features = ["dangerous_configuration"] }
 rustls-native-certs = "*"

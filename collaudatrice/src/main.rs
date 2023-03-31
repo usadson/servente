@@ -10,9 +10,10 @@ use owo_colors::OwoColorize;
 use crate::io::UntrustedCertificateServerCertVerifier;
 
 mod analyze;
+mod http1;
 mod io;
 
-#[derive(Parser, Debug)]
+#[derive(Clone, Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
    /// The host to connect to.
@@ -24,7 +25,7 @@ pub struct Args {
    port: u16,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Configuration {
     pub args: Args,
     pub rustls_client_config: Arc<rustls::ClientConfig>,
@@ -65,9 +66,14 @@ async fn main() -> anyhow::Result<()> {
 
     let analysis = run_analysis(&mut config).await?;
 
-    println!("{} Indexing server", "II:".blue());
-    // TODO
-    _ = analysis;
+    if let Some(address) = analysis.ipv6_address.or(analysis.ipv4_address) {
+        println!("{} Indexing server", "II:".blue());
+        // TODO
+        _ = analysis;
+
+        println!("{} Running HTTP/1.1 tests", "III".blue());
+        http1::run(&config, address).await;
+    }
 
     println!();
     println!("Finished in {} seconds", start.elapsed().as_secs_f64());
