@@ -7,6 +7,7 @@ pub mod sec_fetch_dest;
 pub use sec_fetch_dest::*;
 
 use std::time::SystemTime;
+use std::fmt::Write;
 
 use servente_resources::MediaType;
 
@@ -66,24 +67,24 @@ impl HeaderValue {
                 response_text.push_str(content_coding.http_identifier());
             }
             HeaderValue::ContentRange(content_range) => {
-                response_text.push_str(&match content_range {
+                match content_range {
                     ContentRangeHeaderValue::Range { start, end, complete_length } => {
                         debug_assert!(start < end, "`start` must be less than `end` for Content-Range");
                         match complete_length {
                             Some(complete_length) => {
                                 debug_assert!(end < complete_length, "`end` must be less than `complete_length` for Content-Range");
-                                format!("bytes {}-{}/{}", start, end, complete_length)
+                                _ = write!(response_text, "bytes {start}-{end}/{complete_length}");
                             }
-                            None => format!("bytes {}-{}/*", start, end),
+                            None => _ = write!(response_text, "bytes {start}-{end}/*"),
                         }
                     }
                     ContentRangeHeaderValue::Unsatisfied { complete_length } => {
-                        format!("bytes */{}", complete_length)
+                        _ = write!(response_text, "bytes */{}", *complete_length);
                     }
-                });
+                };
             }
             HeaderValue::DateTime(date_time) => {
-                response_text.push_str(&httpdate::fmt_http_date(*date_time));
+                _ = write!(response_text, "{}", httpdate::HttpDate::from(*date_time));
             }
             HeaderValue::MediaType(media_type) => {
                 response_text.push_str(media_type.as_str());
@@ -92,7 +93,7 @@ impl HeaderValue {
                 response_text.push_str(sec_fetch_dest.as_str());
             }
             HeaderValue::Size(size) => {
-                response_text.push_str(&size.to_string());
+                _ = write!(response_text, "{size}");
             }
         }
     }
