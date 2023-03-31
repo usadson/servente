@@ -196,6 +196,7 @@ pub enum DecompressionError {
     DuplicateScheme,
 
     PseudoAfterRegularFields,
+    PseudoInTrailerSection,
 
     EmptyPath,
 
@@ -857,13 +858,120 @@ const STATIC_TABLE: &[StaticTableEntry; 62] = &[
     StaticTableEntry::Header(HeaderName::WwwAuthenticate),
 ];
 
-pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_table: Arc<Mutex<DynamicTable>>) -> Result<Request, DecompressionError> {
+/// In HTTP/2, there are two types of sections:
+/// 1. Header Section
+/// 2. Trailer Section
+///
+/// We can't decode the headers combined, so we should have to separate paths
+/// for both cases.
+trait HpackDecodeSink {
+    fn add_header(&mut self, name: HeaderName, value: HeaderValue) -> Result<(), DecompressionError>;
+    fn set_authority(&mut self, authority: StaticOrSharedString) -> Result<(), DecompressionError>;
+    fn set_method(&mut self, method: Method) -> Result<(), DecompressionError>;
+    fn set_path(&mut self, path: StaticOrSharedString) -> Result<(), DecompressionError>;
+    fn set_scheme(&mut self, scheme: StaticOrSharedString) -> Result<(), DecompressionError>;
+}
+
+#[derive(Debug, Default)]
+struct HpackDecodeSinkHeaders {
+    path: Option<StaticOrSharedString>,
+    method: Option<Method>,
+    scheme: Option<StaticOrSharedString>,
+    authority: Option<StaticOrSharedString>,
+    headers: HeaderMap,
+}
+
+unsafe impl Send for HpackDecodeSinkHeaders{}
+unsafe impl Sync for HpackDecodeSinkHeaders{}
+
+impl HpackDecodeSink for HpackDecodeSinkHeaders {
+    fn add_header(&mut self, name: HeaderName, value: HeaderValue) -> Result<(), DecompressionError> {
+        self.headers.append_possible_duplicate(name, value);
+        Ok(())
+    }
+
+    fn set_authority(&mut self, authority: StaticOrSharedString) -> Result<(), DecompressionError> {
+        if !self.headers.is_empty() {
+            return Err(DecompressionError::PseudoAfterRegularFields);
+        }
+
+        if self.authority.is_some() {
+            return Err(DecompressionError::DuplicateAuthority);
+        }
+
+        self.authority = Some(authority);
+        Ok(())
+    }
+
+    fn set_method(&mut self, method: Method) -> Result<(), DecompressionError> {
+        if !self.headers.is_empty() {
+            return Err(DecompressionError::PseudoAfterRegularFields);
+        }
+
+        if self.method.is_some() {
+            return Err(DecompressionError::DuplicateMethod);
+        }
+
+        self.method = Some(method);
+        Ok(())
+    }
+
+    fn set_path(&mut self, path: StaticOrSharedString) -> Result<(), DecompressionError> {
+        if !self.headers.is_empty() {
+            return Err(DecompressionError::PseudoAfterRegularFields);
+        }
+
+        if self.path.is_some() {
+            return Err(DecompressionError::DuplicatePath);
+        }
+
+        self.path = Some(path);
+        Ok(())
+    }
+
+    fn set_scheme(&mut self, scheme: StaticOrSharedString) -> Result<(), DecompressionError> {
+        if !self.headers.is_empty() {
+            return Err(DecompressionError::PseudoAfterRegularFields);
+        }
+
+        if self.scheme.is_some() {
+            return Err(DecompressionError::DuplicateScheme);
+        }
+
+        self.scheme = Some(scheme);
+        Ok(())
+    }
+}
+
+pub(super) async fn decode_hpack_header_section(request: super::BinaryRequest, dynamic_table: Arc<Mutex<DynamicTable>>) -> Result<Request, DecompressionError> {
+    let mut sink = HpackDecodeSinkHeaders::default();
+    let sink_reference = &mut sink;
+    decode_hpack_sink(request, dynamic_table, sink_reference).await?;
+
+    let Some(path) = sink.path else {
+        return Err(DecompressionError::NoPath);
+    };
+
+    let Some(method) = sink.method else {
+        return Err(DecompressionError::NoMethod);
+    };
+
+    if sink.scheme.is_none() && method != Method::Connect {
+        return Err(DecompressionError::NoScheme);
+    }
+
+    Ok(Request {
+        method,
+        target: RequestTarget::Origin { path: path.as_ref().to_string(), query: String::new() },
+        version: HttpVersion::Http2,
+        headers: sink.headers,
+        body: None
+    })
+}
+
+async fn decode_hpack_sink<S>(mut request: super::BinaryRequest, dynamic_table: Arc<Mutex<DynamicTable>>, sink: &mut S) -> Result<(), DecompressionError>
+        where S: HpackDecodeSink {
     let mut dynamic_table = dynamic_table.lock_owned().await;
-    let mut path = None;
-    let mut method = None;
-    let mut scheme = None;
-    let mut authority = None;
-    let mut headers = Vec::new();
 
     let mut is_first = true;
     while let Some(first_octet) = request.read_u8() {
@@ -879,43 +987,11 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
             };
 
             match dynamic_table.get(index, None)? {
-                DynamicTableEntry::Authority(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if authority.is_some() {
-                        return Err(DecompressionError::DuplicateAuthority);
-                    }
-                    authority = Some(val);
-                },
-                DynamicTableEntry::Header { name, value } => headers.push((name, value)),
-                DynamicTableEntry::Method(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if method.is_some() {
-                        return Err(DecompressionError::DuplicateMethod);
-                    }
-                    method = Some(val);
-                }
-                DynamicTableEntry::Path(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if path.is_some() {
-                        return Err(DecompressionError::DuplicatePath);
-                    }
-                    path = Some(val.as_ref().to_string());
-                }
-                DynamicTableEntry::Scheme(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if scheme.is_some() {
-                        return Err(DecompressionError::DuplicateScheme);
-                    }
-                    scheme = Some(val);
-                },
+                DynamicTableEntry::Authority(val) => sink.set_authority(val)?,
+                DynamicTableEntry::Header { name, value } => sink.add_header(name, value)?,
+                DynamicTableEntry::Method(val) => sink.set_method(val)?,
+                DynamicTableEntry::Path(val) => sink.set_path(val)?,
+                DynamicTableEntry::Scheme(val) => sink.set_scheme(val)?
             }
             continue;
         }
@@ -933,7 +1009,7 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
                 let header = (HeaderName::from(name), HeaderValue::from(value));
                 validate_header(&header)?;
                 dynamic_table.insert(DynamicTableEntry::Header { name: header.0.clone(), value: header.1.clone() });
-                headers.push(header);
+                sink.add_header(header.0, header.1)?;
                 continue;
             }
 
@@ -945,50 +1021,25 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
             let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
             match dynamic_table.get(index, Some(value))? {
                 DynamicTableEntry::Authority(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if authority.is_some() {
-                        return Err(DecompressionError::DuplicateAuthority);
-                    }
                     dynamic_table.insert(DynamicTableEntry::Authority(val.clone()));
-                    authority = Some(val);
+                    sink.set_authority(val)?;
                 },
                 DynamicTableEntry::Header { name, value } => {
-                    let header = (name, value);
-                    dynamic_table.insert(DynamicTableEntry::Header { name: header.0.clone(), value: header.1.clone() });
-                    headers.push(header);
+                    dynamic_table.insert(DynamicTableEntry::Header { name: name.clone(), value: value.clone() });
+                    sink.add_header(name, value)?;
                 }
                 DynamicTableEntry::Method(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if method.is_some() {
-                        return Err(DecompressionError::DuplicateMethod);
-                    }
                     dynamic_table.insert(DynamicTableEntry::Method(val.clone()));
-                    method = Some(val);
+                    sink.set_method(val)?;
                 }
                 DynamicTableEntry::Path(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if path.is_some() {
-                        return Err(DecompressionError::DuplicatePath);
-                    }
                     validate_path(val.as_ref())?;
                     dynamic_table.insert(DynamicTableEntry::Path(val.clone()));
-                    path = Some(val.as_ref().to_string());
+                    sink.set_path(val)?;
                 }
                 DynamicTableEntry::Scheme(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if scheme.is_some() {
-                        return Err(DecompressionError::DuplicateScheme);
-                    }
                     dynamic_table.insert(DynamicTableEntry::Scheme(val.clone()));
-                    scheme = Some(val);
+                    sink.set_scheme(val)?;
                 }
             }
             continue;
@@ -1024,7 +1075,7 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
 
                 let header = (HeaderName::from(name), HeaderValue::from(value));
                 validate_header(&header)?;
-                headers.push(header);
+                sink.add_header(header.0, header.1)?;
                 continue;
             }
 
@@ -1039,46 +1090,20 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
             let entry = dynamic_table.get(index, Some(value))?;
             match entry {
                 DynamicTableEntry::Authority(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if authority.is_some() {
-                        return Err(DecompressionError::DuplicateAuthority);
-                    }
-                    authority = Some(val);
+                    sink.set_authority(val)?;
                 },
                 DynamicTableEntry::Header { name, value } => {
                     let header = (name, value);
                     validate_header(&header)?;
-                    headers.push(header);
+                    sink.add_header(header.0, header.1)?;
                 }
-                DynamicTableEntry::Method(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if method.is_some() {
-                        return Err(DecompressionError::DuplicateMethod);
-                    }
-                    method = Some(val);
-                }
+                DynamicTableEntry::Method(val) => sink.set_method(val)?,
                 DynamicTableEntry::Path(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
                     validate_path(val.as_ref())?;
-                    if path.is_some() {
-                        return Err(DecompressionError::DuplicatePath);
-                    }
-                    path = Some(val.as_ref().to_string());
+                    sink.set_path(val)?;
                 }
                 DynamicTableEntry::Scheme(val) => {
-                    if !headers.is_empty() {
-                        return Err(DecompressionError::PseudoAfterRegularFields);
-                    }
-                    if scheme.is_some() {
-                        return Err(DecompressionError::DuplicateScheme);
-                    }
-                    scheme = Some(val);
+                    sink.set_scheme(val)?;
                 }
             }
             continue;
@@ -1098,7 +1123,7 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
             let header = (HeaderName::from(name), HeaderValue::from(value));
             validate_header(&header)?;
 
-            headers.push(header);
+            sink.add_header(header.0, header.1)?;
             continue;
         }
 
@@ -1113,70 +1138,67 @@ pub(super) async fn decode_hpack(mut request: super::BinaryRequest, dynamic_tabl
         let entry = dynamic_table.get(index, Some(value))?;
         match entry {
             DynamicTableEntry::Authority(val) => {
-                if !headers.is_empty() {
-                    return Err(DecompressionError::PseudoAfterRegularFields);
-                }
-                if authority.is_some() {
-                    return Err(DecompressionError::DuplicateAuthority);
-                }
-                authority = Some(val);
+                sink.set_authority(val)?;
             },
             DynamicTableEntry::Header { name, value } => {
                 let header = (name, value);
                 validate_header(&header)?;
-                headers.push(header);
+                sink.add_header(header.0, header.1)?
             }
-            DynamicTableEntry::Method(val) => {
-                if !headers.is_empty() {
-                    return Err(DecompressionError::PseudoAfterRegularFields);
-                }
-                if method.is_some() {
-                    return Err(DecompressionError::DuplicateMethod);
-                }
-                method = Some(val);
-            }
+            DynamicTableEntry::Method(val) => sink.set_method(val)?,
             DynamicTableEntry::Path(val) => {
-                if !headers.is_empty() {
-                    return Err(DecompressionError::PseudoAfterRegularFields);
-                }
                 validate_path(val.as_ref())?;
-                if path.is_some() {
-                    return Err(DecompressionError::DuplicatePath);
-                }
-                path = Some(val.as_ref().to_string());
+                sink.set_path(val)?;
             }
             DynamicTableEntry::Scheme(val) => {
-                if !headers.is_empty() {
-                    return Err(DecompressionError::PseudoAfterRegularFields);
-                }
-                if scheme.is_some() {
-                    return Err(DecompressionError::DuplicateScheme);
-                }
                 dynamic_table.insert(DynamicTableEntry::Scheme(val.clone()));
-                scheme = Some(val);
+                sink.set_scheme(val)?;
             }
         }
     }
 
-    let Some(path) = path else {
-        return Err(DecompressionError::NoPath);
-    };
+    Ok(())
+}
 
-    let Some(method) = method else {
-        return Err(DecompressionError::NoMethod);
-    };
+#[derive(Debug)]
+struct HpackDecodeSinkTrailers<'a> {
+    request: &'a mut Request,
+}
 
-    if scheme.is_none() && method != Method::Connect {
-        return Err(DecompressionError::NoScheme);
+unsafe impl<'a> Send for HpackDecodeSinkTrailers<'a>{}
+unsafe impl<'a> Sync for HpackDecodeSinkTrailers<'a>{}
+
+impl<'a> HpackDecodeSink for HpackDecodeSinkTrailers<'a> {
+    fn add_header(&mut self, name: HeaderName, value: HeaderValue) -> Result<(), DecompressionError> {
+        self.request.headers.append_possible_duplicate(name, value);
+        Ok(())
     }
 
-    Ok(Request {
-        method,
-        target: RequestTarget::Origin { path, query: String::new() },
-        version: HttpVersion::Http2,
-        headers: HeaderMap::new_with_vec(headers),
-        body: None
-    })
+    fn set_authority(&mut self, _: StaticOrSharedString) -> Result<(), DecompressionError> {
+        Err(DecompressionError::PseudoInTrailerSection)
+    }
+
+    fn set_method(&mut self, _: Method) -> Result<(), DecompressionError> {
+        Err(DecompressionError::PseudoInTrailerSection)
+    }
+
+    fn set_path(&mut self, _: StaticOrSharedString) -> Result<(), DecompressionError> {
+        Err(DecompressionError::PseudoInTrailerSection)
+    }
+
+    fn set_scheme(&mut self, _: StaticOrSharedString) -> Result<(), DecompressionError> {
+        Err(DecompressionError::PseudoInTrailerSection)
+    }
+}
+
+pub(super) async fn decode_hpack_tailer_section(binary_request: super::BinaryRequest,
+        dynamic_table: Arc<Mutex<DynamicTable>>,
+        request: &mut Request) -> Result<(), DecompressionError> {
+    let mut sink = HpackDecodeSinkTrailers{ request };
+
+    decode_hpack_sink(binary_request, dynamic_table, &mut sink).await?;
+
+    Ok(())
 }
 
 struct BitReader<'a> {
@@ -1458,7 +1480,7 @@ mod tests {
     use rstest::rstest;
 
     use servente_http::{RequestTarget, HttpVersion};
-    use crate::{BinaryRequest, StreamId};
+    use crate::BinaryRequest;
 
     use super::*;
 
@@ -1674,9 +1696,7 @@ mod tests {
     #[test]
     fn test_binary_request_read_string(#[case] expected: &str, #[case] input: &[u8]) {
         let mut binary_request = BinaryRequest {
-            stream_id: StreamId(1),
             headers: vec![Vec::from(input)],
-            data: Vec::new(),
             cursor: 0,
         };
         assert_eq!(binary_request.read_string().as_deref(), Some(expected));
@@ -1717,13 +1737,11 @@ mod tests {
         ];
         let dynamic_table = Arc::new(Mutex::new(DynamicTable::new(4096)));
         let request = BinaryRequest {
-            stream_id: StreamId(1),
             headers: vec![data],
-            data: Vec::new(),
             cursor: 0,
         };
 
-        let request = decode_hpack(request, dynamic_table).await.unwrap();
+        let request = decode_hpack_header_section(request, dynamic_table).await.unwrap();
         assert_eq!(request.method, Method::Get);
         assert_eq!(request.target, RequestTarget::Origin { path: "/".to_string(), query: String::new() });
         assert_eq!(request.headers.iter().next(), None);
@@ -1738,13 +1756,11 @@ mod tests {
         ];
         let dynamic_table = Arc::new(Mutex::new(DynamicTable::new(4096)));
         let request = BinaryRequest {
-            stream_id: StreamId(1),
             headers: vec![data],
-            data: Vec::new(),
             cursor: 0,
         };
 
-        let request = decode_hpack(request, dynamic_table).await.unwrap();
+        let request = decode_hpack_header_section(request, dynamic_table).await.unwrap();
         assert_eq!(request.method, Method::Get);
         assert_eq!(request.target, RequestTarget::Origin { path: "/".to_string(), query: String::new() });
         assert_eq!(request.version, HttpVersion::Http2);

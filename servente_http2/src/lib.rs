@@ -72,24 +72,32 @@ const SETTINGS_NO_RFC7540_PRIORITIES: u16 = 0x00_09;
 const SETTINGS_TLS_RENEG_PERMITTED: u16 = 0x00_10;
 
 struct BinaryRequest {
-    /// The stream from where the request was initiated from and where the
-    /// response should be sent to.
-    stream_id: StreamId,
-
     /// A list of all the header data, first should be from the HEADERS frame,
     /// optionally the others from CONTINUATION frames.
     headers: Vec<Vec<u8>>,
-
-    data: Vec<Vec<u8>>,
 
     /// The byte position in the header stream.
     cursor: usize,
 }
 
+struct RequestInTransit {
+    /// The stream from where the request was initiated from and where the
+    /// response should be sent to.
+    stream_id: StreamId,
+
+    headers: BinaryRequest,
+    trailers: BinaryRequest,
+    body: Vec<Vec<u8>>,
+}
+
 impl BinaryRequest {
     #[inline]
     pub async fn decode(self, dynamic_table: Arc<Mutex<DynamicTable>>) -> Result<Request, RequestError> {
-        hpack::decode_hpack(self, dynamic_table).await.map_err(RequestError::CompressionError)
+        hpack::decode_hpack_header_section(self, dynamic_table).await.map_err(RequestError::CompressionError)
+    }
+
+    pub async fn decode_trailers(self, request: &mut Request, dynamic_table: Arc<Mutex<DynamicTable>>) -> Result<(), RequestError> {
+        hpack::decode_hpack_tailer_section(self, dynamic_table, request).await.map_err(RequestError::CompressionError)
     }
 
     pub fn peek_u8(&self) -> Option<u8> {
@@ -252,7 +260,7 @@ impl Connection {
         self.settings.apply(settings);
 
         self.streams.insert(StreamId::CONTROL, Stream {
-            state: StreamState::Open { request: None },
+            state: StreamState::Open { request: None, },
         });
 
         self.send_frame_with_flush(Frame::SettingsAcknowledgement).await?;
@@ -940,8 +948,8 @@ enum StreamState {
 
     /// The state of a stream when a HEADERS frame has been received, and
     /// before the END_STREAM flag has been received.
-    Open{
-        request: Option<BinaryRequest>,
+    Open {
+        request: Option<RequestInTransit>,
     },
 
     #[cfg(feature = "server_push")]
@@ -989,7 +997,7 @@ impl StreamState {
 
     /// When a stream has a unprocessed and unparsed request, this method
     /// returns it.
-    pub fn into_request(self) -> Option<BinaryRequest> {
+    pub fn into_request(self) -> Option<RequestInTransit> {
         if let StreamState::Open { request } = self {
             request
         } else {
@@ -1117,14 +1125,47 @@ async fn handle_frame(connection: &mut Connection, frame: Frame, concurrent_cont
         Frame::Data { end_stream, stream_id, payload, } => handle_frame_data(connection, concurrent_context, end_stream, stream_id, payload).await?,
 
         Frame::Headers { end_stream, payload, stream_id, .. } => {
-            let stream_state_at_beginning = connection.streams.get(&stream_id);
+            let stream_state_at_beginning = connection.streams.get_mut(&stream_id);
 
             if stream_id == StreamId::CONTROL {
                 return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("HEADERS on control stream") });
             }
 
-            if stream_state_at_beginning.is_some() && !stream_state_at_beginning.unwrap().state.client_may_send_headers() {
+            if stream_state_at_beginning.is_some() && !stream_state_at_beginning.as_ref().unwrap().state.client_may_send_headers() {
                 return Err(ConnectionError::ConnectionError { error_code: ErrorCode::StreamClosed, additional_debug_data: String::from("HEADERS on invalid stream") });
+            }
+
+            if let Some(stream_state_at_beginning) = stream_state_at_beginning {
+                if let StreamState::Open { request } = &mut stream_state_at_beginning.state {
+                    if let Some(mut request) = request.take() {
+                        if !request.trailers.headers.is_empty() {
+                            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::InadequateSecurity, additional_debug_data: String::from("Duplicate trailers") });
+                        }
+
+                        if !end_stream {
+                            return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("Trailing HEADERS without the END_STREAM flag set") });
+                        }
+
+                        request.trailers.headers.push(payload);
+
+                        let state = std::mem::replace(&mut stream_state_at_beginning.state, StreamState::HalfClosedRemote);
+
+                        while connection.continuation.is_some() {
+                            #[cfg(feature = "debugging")]
+                            println!("Waiting for continuation...");
+                            let frame = connection.read_frame().await?;
+                            debug_assert!(frame.frame_type() == FRAME_TYPE_CONTINUATION);
+                            if let Frame::Continuation { payload, .. } = frame {
+                                request.trailers.headers.push(payload);
+                            }
+                        }
+
+                        if end_stream {
+                            handle_request_invoke_to_background(connection, concurrent_context, stream_id, state.into_request().unwrap());
+                        }
+                        return Ok(());
+                    }
+                }
             }
 
             // 5.1.1. Stream Identifiers
@@ -1132,25 +1173,32 @@ async fn handle_frame(connection: &mut Connection, frame: Frame, concurrent_cont
                 return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("New stream IDs must be greater than all the previous initiated streams") });
             }
 
-            let mut binary_request = BinaryRequest { stream_id, headers: vec![payload], data: Vec::new(), cursor: 0 };
+            let mut binary_request = BinaryRequest { headers: vec![payload], cursor: 0 };
             while connection.continuation.is_some() {
+                #[cfg(feature = "debugging")]
                 println!("Waiting for continuation...");
                 let frame = connection.read_frame().await?;
                 debug_assert!(frame.frame_type() == FRAME_TYPE_CONTINUATION);
                 if let Frame::Continuation { payload, .. } = frame {
-                    println!("Got one with ");
                     binary_request.headers.push(payload);
                 }
             }
 
+            let request_in_transit = RequestInTransit{
+                stream_id,
+                headers: binary_request,
+                trailers: BinaryRequest{ headers: Vec::new(), cursor: 0 },
+                body: Vec::new()
+            };
+
             if !end_stream {
                 connection.streams.insert(stream_id, Stream {
                     state: StreamState::Open {
-                        request: Some(binary_request)
+                        request: Some(request_in_transit)
                     }
                 });
             } else {
-                handle_request_invoke_to_background(connection, concurrent_context, stream_id, binary_request);
+                handle_request_invoke_to_background(connection, concurrent_context, stream_id, request_in_transit);
             }
         }
 
@@ -1197,12 +1245,16 @@ async fn handle_frame_data(connection: &mut Connection,
     if let hashbrown::hash_map::Entry::Occupied(mut e) = connection.streams.entry(stream_id) {
         let stream = e.get_mut();
         if let StreamState::Open { request } = &mut stream.state {
-            if let Some(binary_request) = request {
-                if stream_id != binary_request.stream_id {
+            if let Some(request_in_transit) = request {
+                if stream_id != request_in_transit.stream_id {
                     return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("Unexpected DATA frame for stream mismatch") });
                 }
 
-                binary_request.data.push(payload);
+                if !request_in_transit.trailers.headers.is_empty() {
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("Sent DATA after trailers") });
+                }
+
+                request_in_transit.body.push(payload);
 
                 if end_stream {
                     let state = std::mem::replace(&mut stream.state, StreamState::HalfClosedRemote);
@@ -1265,24 +1317,29 @@ fn handle_frame_window_update(connection: &mut Connection, stream_id: StreamId, 
     Ok(())
 }
 
-fn handle_request_invoke_to_background(connection: &mut Connection, concurrent_context: &mut ConcurrentContext, stream_id: StreamId, binary_request: BinaryRequest) {
+fn handle_request_invoke_to_background(connection: &mut Connection, concurrent_context: &mut ConcurrentContext, stream_id: StreamId, request_in_transit: RequestInTransit) {
     connection.streams.insert(stream_id, Stream {
         state: StreamState::HalfClosedRemote,
     });
 
-    concurrent_context.requests.insert(stream_id, tokio::spawn(handle_request(binary_request, concurrent_context.sender.clone(), Arc::clone(&concurrent_context.dynamic_table), Arc::clone(&concurrent_context.servente_config))));
+    concurrent_context.requests.insert(stream_id, tokio::spawn(handle_request(request_in_transit, concurrent_context.sender.clone(), Arc::clone(&concurrent_context.dynamic_table), Arc::clone(&concurrent_context.servente_config))));
 }
 
-async fn handle_request(binary_request: BinaryRequest, sender: tokio::sync::mpsc::Sender<(StreamId, Result<Response, RequestError>)>,
+async fn handle_request(request_in_transit: RequestInTransit, sender: tokio::sync::mpsc::Sender<(StreamId, Result<Response, RequestError>)>,
         dynamic_table: Arc<Mutex<DynamicTable>>, config: Arc<ServenteConfig>) {
-    let stream_id = binary_request.stream_id;
-    let result = handle_request_inner(binary_request, dynamic_table, config).await;
+    let stream_id = request_in_transit.stream_id;
+    let result = handle_request_inner(request_in_transit, dynamic_table, config).await;
     _ = sender.send((stream_id, result)).await;
 }
 
-async fn handle_request_inner(mut binary_request: BinaryRequest, dynamic_table: Arc<Mutex<DynamicTable>>, config: Arc<ServenteConfig>) -> Result<Response, RequestError> {
-    let data = std::mem::take(&mut binary_request.data);
-    let request = binary_request.decode(dynamic_table).await?;
+async fn handle_request_inner(mut request_in_transit: RequestInTransit, dynamic_table: Arc<Mutex<DynamicTable>>, config: Arc<ServenteConfig>) -> Result<Response, RequestError> {
+    let data = std::mem::take(&mut request_in_transit.body);
+
+    let mut request = request_in_transit.headers.decode(dynamic_table.clone()).await?;
+    if !request_in_transit.trailers.headers.is_empty() {
+        request_in_transit.trailers.decode_trailers(&mut request, dynamic_table).await?;
+    }
+
     if let Some(content_length) = request.headers.get(&HeaderName::ContentLength) {
         if let Some(content_length) = content_length.parse_number() {
             let full_data_sum = data.iter().map(|payload| payload.len()).sum();
