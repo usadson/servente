@@ -131,4 +131,6 @@ pub enum HttpParseError {
 
     InvalidOctetInMethod,
     InvalidOctetInRequestTarget,
+
+    InvalidHttp2PriUpgradeBody,
 }

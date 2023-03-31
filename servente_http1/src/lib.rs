@@ -155,14 +155,42 @@ impl AsyncWrite for StreamWrapper {
 /// character (LF) from the stream.
 async fn consume_crlf<R>(stream: &mut R) -> Result<(), Error>
         where R: AsyncBufReadExt + Unpin {
-    let mut buffer = [0u8; 2];
-    stream.read_exact(&mut buffer).await?;
+    _ = consume_exact_verify(stream, 2, |index, byte| {
+        if index == 0 && byte != b'\r' {
+            return Err(Error::ParseError(HttpParseError::InvalidCRLF));
+        }
 
-    if buffer[0] != b'\r' || buffer[1] != b'\n' {
-        return Err(Error::ParseError(HttpParseError::InvalidCRLF));
+        if index == 1 && byte != b'\n' {
+            return Err(Error::ParseError(HttpParseError::InvalidCRLF));
+        }
+
+        Ok(())
+    }).await?;
+    Ok(())
+}
+
+async fn consume_exact_verify<R>(stream: &mut R, length: usize, byte_validator: fn(usize, u8) -> Result<(), Error>) -> Result<Vec<u8>, Error>
+        where R: AsyncBufReadExt + Unpin {
+    if length == 0 {
+        return Ok(Vec::new());
     }
 
-    Ok(())
+    let mut buffer = Vec::<u8>::new();
+    buffer.resize(length, 0);
+
+    let mut idx = 0;
+    while idx != length {
+        let read = stream.read(&mut buffer[idx..(length - idx)]).await?;
+        if read == 0 {
+            return Err(Error::Other(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "EOF")));
+        }
+        for i in 0..read {
+            byte_validator(idx + i, buffer[i])?;
+        }
+        idx += read;
+    }
+
+    Ok(buffer)
 }
 
 /// Plans out the best `TransferStrategy` for the given response.
@@ -373,12 +401,17 @@ async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, settings: &Serven
 async fn handle_pri_method<R, W>(reader: &mut R, writer: &mut W, request: Request) -> Result<(), ExchangeError>
         where R: AsyncBufReadExt + Unpin,
               W: AsyncWriteExt + Unpin {
-    let mut buf: [u8; 8] = [0; 8];
-    reader.read_exact(&mut buf).await?;
+    fn validate(index: usize, byte: u8) -> Result<(), Error> {
+        if b"\r\nSM\r\n\r\n"[index] != byte {
+            Err(Error::ParseError(HttpParseError::InvalidHttp2PriUpgradeBody))
+        } else {
+            Ok(())
+        }
+    }
 
-    if &buf[..] != b"\r\nSM\r\n\r\n" {
+    if let Err(Error::ParseError(HttpParseError::InvalidHttp2PriUpgradeBody)) = consume_exact_verify(reader, 8, validate).await {
         #[cfg(feature = "debugging")]
-        println!("[HTTP/2] [PRI Upgrade] Invalid body: {:?}", buf);
+        println!("[HTTP/2] [PRI Upgrade] Invalid body!");
 
         let mut response = Response::with_status_and_string_body(StatusCode::BadRequest,
             "Invalid HTTP/2 PRI upgrade body");
@@ -561,13 +594,21 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
 /// Reads the HTTP version from the stream.
 async fn read_http_version<R>(stream: &mut R) -> Result<HttpVersion, Error>
         where R: AsyncBufReadExt + Unpin {
-    let mut version_buffer = [0u8; 8];
+    _ = consume_exact_verify(stream, 5, |index, byte| {
+        if b"HTTP/"[index] == byte {
+            Ok(())
+        } else {
+            Err(Error::ParseError(HttpParseError::InvalidHttpVersion))
+        }
+    }).await?;
+
+    let mut version_buffer = [0u8; 3];
     stream.read_exact(&mut version_buffer).await?;
 
     Ok(match &version_buffer {
-        b"HTTP/1.0" => HttpVersion::Http10,
-        b"HTTP/1.1" => HttpVersion::Http11,
-        b"HTTP/2.0" => HttpVersion::Http2,
+        b"1.0" => HttpVersion::Http10,
+        b"1.1" => HttpVersion::Http11,
+        b"2.0" => HttpVersion::Http2,
         _ => return Err(Error::ParseError(HttpParseError::InvalidHttpVersion)),
     })
 }
@@ -953,6 +994,29 @@ mod tests {
             read_headers_timeout: Duration::from_secs(5),
             read_body_timeout: Duration::from_secs(5),
         };
+    }
+
+    #[tokio::test]
+    async fn test_consume_exact_verify() {
+        let mut buf = std::io::Cursor::new(&[0, 1, 2, 3, 4, 5, 7]);
+
+        let result = consume_exact_verify(&mut buf, 6, |idx, byte| {
+            if idx == byte as usize {
+                Ok(())
+            } else {
+                Err(Error::ParseError(HttpParseError::InvalidOctetInMethod))
+            }
+        }).await;
+
+        assert_eq!(result.unwrap(), vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(buf.position(), 6);
+        assert_eq!(consume_exact_verify(&mut buf, 0, |_,_| Ok(())).await.unwrap(), Vec::new());
+
+        let eof_result = consume_exact_verify(&mut tokio::io::empty(), 3, |_,_| Ok(())).await;
+        assert!(matches!(eof_result, Err(Error::Other(_))));
+        if let Error::Other(io_error) = eof_result.unwrap_err() {
+            assert_eq!(io_error.kind(), std::io::ErrorKind::UnexpectedEof);
+        }
     }
 
     #[tokio::test]
