@@ -1148,7 +1148,7 @@ async fn handle_frame(connection: &mut Connection, frame: Frame, concurrent_cont
 
                         request.trailers.headers.push(payload);
 
-                        let state = std::mem::replace(&mut stream_state_at_beginning.state, StreamState::HalfClosedRemote);
+                        stream_state_at_beginning.state = StreamState::HalfClosedRemote;
 
                         while connection.continuation.is_some() {
                             #[cfg(feature = "debugging")]
@@ -1161,7 +1161,7 @@ async fn handle_frame(connection: &mut Connection, frame: Frame, concurrent_cont
                         }
 
                         if end_stream {
-                            handle_request_invoke_to_background(connection, concurrent_context, stream_id, state.into_request().unwrap());
+                            handle_request_invoke_to_background(connection, concurrent_context, stream_id, request);
                         }
                         return Ok(());
                     }
