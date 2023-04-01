@@ -51,3 +51,29 @@ impl RequestTarget {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("*", Some(RequestTarget::Asterisk))]
+    #[case("**", None)]
+    #[case(" *", None)]
+    #[case(" * ", None)]
+    #[case("* ", None)]
+    #[case("* *", None)]
+    #[case(" * *", None)]
+    #[case("* * ", None)]
+    #[case(" * * ", None)]
+    #[case("/", Some(RequestTarget::Origin { path: "/".into(), query: String::new() }))]
+    #[case("/test.html", Some(RequestTarget::Origin { path: "/test.html".into(), query: String::new() }))]
+    #[case("/???", Some(RequestTarget::Origin { path: "/".into(), query: "??".into() }))]
+    #[case("/?t=t", Some(RequestTarget::Origin { path: "/".into(), query: "t=t".into() }))]
+    #[case("https://localhost/index.html", Some(RequestTarget::Absolute("https://localhost/index.html".into())))]
+
+    fn test_parse(#[case] input: &str, #[case] expected: Option<RequestTarget>) {
+        assert_eq!(RequestTarget::parse(input), expected);
+    }
+}
