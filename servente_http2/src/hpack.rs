@@ -236,6 +236,8 @@ pub enum DecompressionError {
     /// # References
     /// * [RFC 9113 - Section 8.2.2](https://httpwg.org/specs/rfc9113.html#ConnectionSpecific)
     TeHeaderNotTrailers,
+
+    InvalidRequestTarget,
 }
 
 impl From<DynamicTableLookupError> for DecompressionError {
@@ -962,7 +964,7 @@ pub(super) async fn decode_hpack_header_section(request: super::HeadersInTransit
 
     Ok(Request {
         method,
-        target: RequestTarget::Origin { path: path.as_ref().to_string(), query: String::new() },
+        target: RequestTarget::parse(path.as_ref().to_owned()).ok_or(DecompressionError::InvalidRequestTarget)?,
         version: HttpVersion::Http2,
         headers: sink.headers,
         body: None

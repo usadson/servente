@@ -732,24 +732,7 @@ async fn read_request_target<R>(stream: &mut R) -> Result<RequestTarget, Error>
         HttpParseError::RequestTargetTooLarge,
         |b| if syntax::is_request_target_character(b) { Ok(()) } else { Err(HttpParseError::InvalidOctetInRequestTarget) }).await?;
 
-    if str == "*" {
-        return Ok(RequestTarget::Asterisk);
-    }
-
-    if str.starts_with('/') {
-        let mut parts = str.splitn(2, '?');
-        return Ok(RequestTarget::Origin {
-            path: parts.next().unwrap_or("").to_string(),
-            query: parts.next().unwrap_or("").to_string(),
-        });
-    }
-
-    // TODO: correctly parse the URI.
-    if str.starts_with("http://") || str.starts_with("https://") {
-        return Ok(RequestTarget::Absolute(str));
-    }
-
-    Err(Error::ParseError(HttpParseError::InvalidRequestTarget))
+    RequestTarget::parse(str).ok_or(Error::ParseError(HttpParseError::InvalidRequestTarget))
 }
 
 /// Send the HTTPS upgrade to the client.
