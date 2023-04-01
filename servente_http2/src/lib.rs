@@ -479,13 +479,13 @@ impl Connection {
                     return Err(ConnectionError::ConnectionError { error_code: ErrorCode::ProtocolError, additional_debug_data: String::from("PING on non-control stream") });
                 }
 
-                if payload_length != 8 {
+                let Some(payload) = payload.try_into().ok() else {
                     return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::from("PING payload length != 8") });
-                }
+                };
 
                 Ok(Frame::Ping {
                     ack: flags & 0x1 == 0x1,
-                    payload: payload.try_into().unwrap(),
+                    payload,
                 })
             }
 
@@ -505,13 +505,13 @@ impl Connection {
 
             // https://www.rfc-editor.org/rfc/rfc9113.html#name-window_update
             FRAME_TYPE_WINDOW_UPDATE => {
-                if payload_length != 4 {
-                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::from("WINDOW_UPDATE length != 4") })
-                }
+                let Some(payload) = TryInto::<[u8; 4]>::try_into(payload).ok() else {
+                    return Err(ConnectionError::ConnectionError { error_code: ErrorCode::FrameSizeError, additional_debug_data: String::from("WINDOW_UPDATE length != 4") });
+                };
 
                 Ok(Frame::WindowUpdate {
                     stream_id,
-                    window_size_increment: u32::from_be_bytes(payload.try_into().unwrap()) & 0x7FFF_FFFF,
+                    window_size_increment: u32::from_be_bytes(payload) & 0x7FFF_FFFF,
                 })
             }
 
@@ -1073,7 +1073,15 @@ pub async fn handle_client(reader: Reader, writer: Writer, servente_config: Arc<
                     }).await.is_err() {
                         break;
                     }
-                    connection.streams.get_mut(&stream_id).unwrap().state = StreamState::Closed;
+
+                    match connection.streams.entry(stream_id) {
+                        hashbrown::hash_map::Entry::Occupied(mut e) => {
+                            e.get_mut().state = StreamState::Closed;
+                        }
+                        hashbrown::hash_map::Entry::Vacant(e) => {
+                            e.insert(Stream{ state: StreamState::Closed });
+                        }
+                    };
                 }
                 ConnectionError::Closed => break,
                 ConnectionError::Io(_) => break,
@@ -1106,7 +1114,9 @@ async fn handle_client_inner_join(connection: &mut Connection, result: (StreamId
     let (stream_id, response_result) = result;
 
     if let Some(join_handle) = concurrent_context.requests.remove(&stream_id) {
-        join_handle.await.unwrap();
+        if !join_handle.await.is_ok() {
+            return Err(ConnectionError::StreamError { error_code: ErrorCode::InternalError, stream_id });
+        }
     }
 
     match response_result {

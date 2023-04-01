@@ -42,11 +42,13 @@ unsafe impl Sync for ServenteConfig {}
 /// Checks if the request is not modified and returns a 304 response if it isn't.
 fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Option<Response> {
     if let Some(etag) = request.headers.get(&HeaderName::IfNoneMatch) {
-        if etag.as_str_no_convert().unwrap() == format_system_time_as_weak_etag(modified_date) {
-            let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
-            response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
-            response.headers.set(HeaderName::ETag, etag.clone());
-            return Some(response);
+        if let Some(etag_as_str) = etag.as_str_no_convert() {
+            if etag_as_str == format_system_time_as_weak_etag(modified_date) {
+                let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
+                response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+                response.headers.set(HeaderName::ETag, etag.clone());
+                return Some(response);
+            }
         }
     }
 
@@ -281,23 +283,29 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
     response.headers.set(HeaderName::ETag, "welcome-en".into());
     response.headers.set(HeaderName::Vary, "Content-Language".into());
 
-    let request_etag = request.headers.get(&HeaderName::IfNoneMatch).map(|etag| etag.as_str_no_convert().unwrap());
+    let request_etag = if let Some(etag) = request.headers.get(&HeaderName::IfNoneMatch) {
+        etag.as_str_no_convert()
+    } else {
+        None
+    };
 
     match request_target {
         "/" | "/index" | "/index.html" => {
             if let Some(accepted_languages) = request.headers.get(&HeaderName::AcceptLanguage) {
-                match find_best_match_in_weighted_list(accepted_languages.as_str_no_convert().unwrap(), &["nl", "en"], 0.0) {
-                    Some(0) => {
-                        response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
-                        response.headers.set(HeaderName::ContentLanguage, "nl".into());
-                        response.headers.set(HeaderName::ETag, "welcome-nl".into());
-                        if request_etag == Some("welcome-nl") {
-                            return serve_welcome_page_not_modified(request);
+                if let Some(accepted_languages) = accepted_languages.as_str_no_convert() {
+                    match find_best_match_in_weighted_list(accepted_languages, &["nl", "en"], 0.0) {
+                        Some(0) => {
+                            response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
+                            response.headers.set(HeaderName::ContentLanguage, "nl".into());
+                            response.headers.set(HeaderName::ETag, "welcome-nl".into());
+                            if request_etag == Some("welcome-nl") {
+                                return serve_welcome_page_not_modified(request);
+                            }
                         }
+                        _ => if request_etag == Some("welcome-en") {
+                            return serve_welcome_page_not_modified(request);
+                        },
                     }
-                    _ => if request_etag == Some("welcome-en") {
-                        return serve_welcome_page_not_modified(request);
-                    },
                 }
             }
         }

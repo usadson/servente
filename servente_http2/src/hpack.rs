@@ -1341,7 +1341,7 @@ impl<'a> Drop for BitWriter<'a> {
         if self.bit_position != 7 {
             // Finish the byte by padding the leftover bits.
             let finish_byte = self.current_byte | (2_u8.pow(self.bit_position as u32 + 1) - 1);
-            self.data.write_all(&[finish_byte]).unwrap();
+            _ = self.data.write_all(&[finish_byte]);
         }
     }
 }
@@ -1388,7 +1388,7 @@ pub(super) fn decode_huffman(input: &[u8]) -> Option<String> {
         }
     }
 
-    Some(String::from_utf8(output).unwrap()) // TODO propagate errors correcty
+    String::from_utf8(output).ok() // TODO propagate errors correcty
 }
 
 /// Validate the header names for applicability, governed by

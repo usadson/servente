@@ -484,8 +484,6 @@ async fn handle_pri_method_http2_not_enabled<W>(writer: &mut W) -> Result<(), Ex
 
 /// Process a single socket connection.
 async fn process_socket(stream: TcpStream, config: ServenteConfig) {
-    //println!("Client connected: {}", stream.peer_addr().unwrap());
-
     #[cfg(feature = "rustls")]
     let stream = {
         let mut stream = stream;
