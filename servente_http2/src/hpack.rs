@@ -1008,6 +1008,7 @@ async fn decode_hpack_sink<S>(mut request: super::HeadersInTransit, dynamic_tabl
                 let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
                 validate_header_value(&value)?;
 
+                let value = Arc::from(value);
                 let header = (HeaderName::from(name), HeaderValue::from(value));
                 validate_header(&header)?;
                 dynamic_table.insert(DynamicTableEntry::Header { name: header.0.clone(), value: header.1.clone() });

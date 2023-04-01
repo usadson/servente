@@ -6,7 +6,7 @@ pub mod sec_fetch_dest;
 
 pub use sec_fetch_dest::*;
 
-use std::time::SystemTime;
+use std::{time::SystemTime, sync::Arc};
 use std::fmt::Write;
 
 use servente_resources::MediaType;
@@ -33,6 +33,7 @@ use crate::{
 /// the transport code.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum HeaderValue {
+    SharedString(Arc<str>),
     StaticString(&'static str),
     String(String),
     ContentCoding(ContentCoding),
@@ -50,6 +51,7 @@ impl HeaderValue {
     pub fn as_str_no_convert(&self) -> Option<&str> {
         match self {
             HeaderValue::StaticString(string) => Some(string),
+            HeaderValue::SharedString(string) => Some(string.as_ref()),
             HeaderValue::String(string) => Some(string),
             _ => None,
         }
@@ -57,6 +59,9 @@ impl HeaderValue {
 
     pub fn append_to_message(&self, response_text: &mut String) {
         match self {
+            HeaderValue::SharedString(string) => {
+                response_text.push_str(string);
+            }
             HeaderValue::StaticString(string) => {
                 response_text.push_str(string);
             }
@@ -122,6 +127,7 @@ impl HeaderValue {
         // Fast path, when the type is a string, or can easily be mapped into
         // one:
         match self {
+            Self::SharedString(str) => return str.len(),
             Self::StaticString(str) => return str.len(),
             Self::String(str) => return str.len(),
             Self::ContentCoding(coding) => return coding.http_identifier().len(),
@@ -138,6 +144,12 @@ impl HeaderValue {
         let mut tmp_str = String::new();
         self.append_to_message(&mut tmp_str);
         tmp_str.len()
+    }
+}
+
+impl From<Arc<str>> for HeaderValue {
+    fn from(value: Arc<str>) -> Self {
+        HeaderValue::SharedString(value)
     }
 }
 
