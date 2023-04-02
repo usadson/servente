@@ -5,10 +5,18 @@ use strum_macros::AsRefStr;
 
 use std::io;
 
+use crate::HeaderMapInsertionError;
+
 #[derive(Debug)]
 pub enum Error {
     ParseError(HttpParseError),
     Other(io::Error),
+}
+
+impl From<HeaderMapInsertionError> for Error {
+    fn from(value: HeaderMapInsertionError) -> Self {
+        Self::ParseError(value.into())
+    }
 }
 
 impl From<HttpParseError> for Error {
@@ -133,4 +141,12 @@ pub enum HttpParseError {
     InvalidOctetInRequestTarget,
 
     InvalidHttp2PriUpgradeBody,
+
+    HeaderMapInsertionError(HeaderMapInsertionError),
+}
+
+impl From<HeaderMapInsertionError> for HttpParseError {
+    fn from(value: HeaderMapInsertionError) -> Self {
+        Self::HeaderMapInsertionError(value)
+    }
 }

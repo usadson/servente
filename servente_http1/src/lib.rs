@@ -250,7 +250,7 @@ async fn determine_transfer_strategy(response: &mut Response, ranges: Option<Htt
             }
 
             if file_size > TRANSFER_ENCODING_THRESHOLD {
-                response.headers.set(HeaderName::TransferEncoding, "chunked".into());
+                response.headers.append_or_override(HeaderName::TransferEncoding, "chunked".into());
                 return TransferStrategy::Chunked;
             }
 
@@ -419,7 +419,7 @@ async fn handle_pri_method<R, W>(reader: &mut R, writer: &mut W, request: Reques
 
         let mut response = Response::with_status_and_string_body(StatusCode::BadRequest,
             "Invalid HTTP/2 PRI upgrade body");
-        response.headers.set(HeaderName::Connection, "close".into());
+        response.headers.append_or_override(HeaderName::Connection, "close".into());
         finish_response_error(&mut response).await;
         send_response(writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
@@ -428,7 +428,7 @@ async fn handle_pri_method<R, W>(reader: &mut R, writer: &mut W, request: Reques
     if request.version != HttpVersion::Http2 {
         let mut response = Response::with_status_and_string_body(StatusCode::HTTPVersionNotSupported,
                 "Invalid HTTP upgrade using PRI: expected version HTTP/2.0");
-        response.headers.set(HeaderName::Connection, "close".into());
+        response.headers.append_or_override(HeaderName::Connection, "close".into());
         finish_response_error(&mut response).await;
         send_response(writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
@@ -438,7 +438,7 @@ async fn handle_pri_method<R, W>(reader: &mut R, writer: &mut W, request: Reques
     if request.headers.iter().next().is_some() {
         let mut response = Response::with_status_and_string_body(StatusCode::BadRequest,
             "Invalid preface start request");
-        response.headers.set(HeaderName::Connection, "close".into());
+        response.headers.append_or_override(HeaderName::Connection, "close".into());
         finish_response_error(&mut response).await;
         send_response(writer, response, None).await?;
         return Err(ExchangeError::MalformedData);
@@ -573,12 +573,12 @@ async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLength) -> Res
 /// Reads the headers from the stream.
 async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         where R: AsyncBufReadExt + Unpin {
-    let mut headers = Vec::new();
+    let mut header_map = HeaderMap::new();
 
     loop {
         let line = read_crlf_line(stream, MaximumLength::HEADER).await?;
         if line.is_empty() {
-            return Ok(HeaderMap::new_with_vec(headers));
+            return Ok(header_map);
         }
 
         let Some((name, value)) = line.split_once(':') else {
@@ -595,7 +595,8 @@ async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
             #[cfg(debug_assertions)]
             println!("[DEBUG] Unknown header name: \"{}\" with value: \"{}\"", name, value);
         }
-        headers.push((name, HeaderValue::from(value)));
+
+        header_map.append(name, HeaderValue::from(value))?;
     }
 }
 

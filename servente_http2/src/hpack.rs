@@ -24,7 +24,7 @@ use servente_http::{
     Method,
     Request,
     Response,
-    StatusCode, HttpVersion, RequestTarget,
+    StatusCode, HttpVersion, RequestTarget, HeaderMapInsertionError,
 };
 
 /// HPACK write extensions for [`Write`] objects
@@ -238,11 +238,19 @@ pub enum DecompressionError {
     TeHeaderNotTrailers,
 
     InvalidRequestTarget,
+
+    HeaderMapInsertionError(HeaderMapInsertionError),
 }
 
 impl From<DynamicTableLookupError> for DecompressionError {
     fn from(value: DynamicTableLookupError) -> Self {
         Self::LookupError(value)
+    }
+}
+
+impl From<HeaderMapInsertionError> for DecompressionError {
+    fn from(value: HeaderMapInsertionError) -> Self {
+        Self::HeaderMapInsertionError(value)
     }
 }
 
@@ -888,7 +896,7 @@ unsafe impl Sync for HpackDecodeSinkHeaders{}
 
 impl HpackDecodeSink for HpackDecodeSinkHeaders {
     fn add_header(&mut self, name: HeaderName, value: HeaderValue) -> Result<(), DecompressionError> {
-        self.headers.append_possible_duplicate(name, value);
+        self.headers.append(name, value)?;
         Ok(())
     }
 
@@ -1173,7 +1181,7 @@ unsafe impl<'a> Sync for HpackDecodeSinkTrailers<'a>{}
 
 impl<'a> HpackDecodeSink for HpackDecodeSinkTrailers<'a> {
     fn add_header(&mut self, name: HeaderName, value: HeaderValue) -> Result<(), DecompressionError> {
-        self.request.headers.append_possible_duplicate(name, value);
+        self.request.headers.append(name, value)?;
         Ok(())
     }
 

@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use phf::phf_map;
 use unicase::UniCase;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HeaderName {
     Other(String),
 

@@ -45,8 +45,8 @@ fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime)
         if let Some(etag_as_str) = etag.as_str_no_convert() {
             if etag_as_str == format_system_time_as_weak_etag(modified_date) {
                 let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
-                response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
-                response.headers.set(HeaderName::ETag, etag.clone());
+                response.headers.append_or_override(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+                response.headers.append_or_override(HeaderName::ETag, etag.clone());
                 return Some(response);
             }
         }
@@ -57,8 +57,8 @@ fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime)
             if let Ok(duration) = modified_date.duration_since(if_modified_since_date) {
                 if duration.as_secs() == 0 {
                     let mut response = Response::with_status_and_string_body(StatusCode::NotModified, String::new());
-                    response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
-                    response.headers.set(HeaderName::LastModified, if_modified_since.to_owned());
+                    response.headers.append_or_override(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+                    response.headers.append_or_override(HeaderName::LastModified, if_modified_since.to_owned());
                     return Some(response);
                 }
             }
@@ -74,7 +74,7 @@ fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime)
 
 /// Finishes a response for an error response.
 pub async fn finish_response_error(response: &mut Response) {
-    response.headers.set(HeaderName::Connection, HeaderValue::from("close"));
+    response.headers.append_or_override(HeaderName::Connection, HeaderValue::from("close"));
     finish_response_general(response).await
 }
 
@@ -90,24 +90,24 @@ async fn finish_response_general(response: &mut Response) {
         }
     }
 
-    response.headers.set(HeaderName::Server, HeaderValue::from("servente"));
+    response.headers.append_or_override(HeaderName::Server, HeaderValue::from("servente"));
 
-    #[cfg(all(feature = "http2", not(feature = "http3")))]
-    response.headers.set(HeaderName::AltSvc, HeaderValue::from("h2=\":8080\""));
+    #[cfg(feature = "http2")]
+    { _ = response.headers.append(HeaderName::AltSvc, HeaderValue::from("h2=\":8080\"")) }
 
-    #[cfg(all(feature = "http2", feature = "http3"))]
-    response.headers.set(HeaderName::AltSvc, HeaderValue::from("h2=\":8080\", h3=\":8080\""));
+    #[cfg(feature = "http3")]
+    { _ = response.headers.append(HeaderName::AltSvc, HeaderValue::from("h3=\":8080\"")) }
 
-    response.headers.set(HeaderName::XFrameOptions, "DENY".into());
-    response.headers.set(HeaderName::XXSSProtection, "X-XSS-Protection: 1; mode=block".into());
-    response.headers.set(HeaderName::XContentTypeOptions, "nosniff".into());
+    response.headers.append_or_override(HeaderName::XFrameOptions, "DENY".into());
+    response.headers.append_or_override(HeaderName::XXSSProtection, "X-XSS-Protection: 1; mode=block".into());
+    response.headers.append_or_override(HeaderName::XContentTypeOptions, "nosniff".into());
 
     if !response.headers.contains(&HeaderName::Connection) {
-        response.headers.set(HeaderName::Connection, HeaderValue::from("keep-alive"));
+        _ = response.headers.append(HeaderName::Connection, HeaderValue::from("keep-alive"));
     }
 
     if !response.headers.contains(&HeaderName::Date) {
-        response.headers.set(HeaderName::Date, SystemTime::now().into());
+        response.headers.append_or_override(HeaderName::Date, SystemTime::now().into());
     }
 }
 
@@ -115,11 +115,11 @@ async fn finish_response_general(response: &mut Response) {
 pub async fn finish_response_normal(request: &Request, response: &mut Response) {
     if response.body.is_some() {
         if !response.headers.contains(&HeaderName::ContentType) {
-            response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(request.target.as_str()).clone()));
+            response.headers.append_or_override(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(request.target.as_str()).clone()));
         }
 
         if response.status.class() == StatusCodeClass::Success && !response.headers.contains(&HeaderName::CacheControl) {
-            response.headers.set(HeaderName::CacheControl, HeaderValue::from("max-age=120"));
+            _ = response.headers.append(HeaderName::CacheControl, HeaderValue::from("max-age=120"));
         }
     }
 
@@ -154,8 +154,7 @@ async fn handle_options(request: &Request, settings: &ServenteSettings) -> Respo
 /// capabilities of the server.
 fn handle_options_asterisk() -> Response {
     let mut response = Response::with_status(StatusCode::Ok);
-    response.headers.set(HeaderName::Allow, "GET, HEAD, OPTIONS, POST".into());
-    response.headers.set(HeaderName::Allow, "GET, HEAD".into());
+    _ = response.headers.append(HeaderName::Allow, "GET, HEAD, OPTIONS, POST".into());
     response.headers.set_content_length(0);
     response
 }
@@ -169,7 +168,7 @@ pub async fn handle_parse_error(error: HttpParseError) -> Response {
 <hr>
 <p>{}</p>", error.as_ref());
     let mut response = Response::with_status_and_string_body(StatusCode::BadRequest, body);
-    response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::HTML));
+    response.headers.append_or_override(HeaderName::ContentType, HeaderValue::from(MediaType::HTML));
     response
 }
 
@@ -204,7 +203,7 @@ pub async fn handle_request(request: &Request, settings: &ServenteSettings) -> R
         let request_target = path.as_str();
         if request.method != Method::Get {
             let mut response = Response::with_status_and_string_body(StatusCode::MethodNotAllowed, "Method Not Allowed");
-            response.headers.set(HeaderName::Allow, "GET".into());
+            _ = response.headers.append(HeaderName::Allow, "GET".into());
             return response;
         }
 
@@ -274,14 +273,14 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
 
     let mut response = Response::with_status(StatusCode::Ok);
     response.headers.set_content_type(MediaType::HTML);
-    response.headers.set(HeaderName::CacheControl, "public, max-age=600".into());
-    response.headers.set(HeaderName::ContentSecurityPolicy, "default-src 'self'; upgrade-insecure-requests; style-src-elem 'self' 'unsafe-inline'".into());
+    _ = response.headers.append(HeaderName::CacheControl, "public, max-age=600".into());
+    _ = response.headers.append(HeaderName::ContentSecurityPolicy, "default-src 'self'; upgrade-insecure-requests; style-src-elem 'self' 'unsafe-inline'".into());
 
     response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML));
-    response.headers.set(HeaderName::ContentLanguage, "en".into());
-    response.headers.set(HeaderName::LastModified, HeaderValue::from(SystemTime::UNIX_EPOCH));
-    response.headers.set(HeaderName::ETag, "welcome-en".into());
-    response.headers.set(HeaderName::Vary, "Content-Language".into());
+    _ = response.headers.append(HeaderName::ContentLanguage, "en".into());
+    response.headers.append_or_override(HeaderName::LastModified, HeaderValue::from(SystemTime::UNIX_EPOCH));
+    response.headers.append_or_override(HeaderName::ETag, "welcome-en".into());
+    _ = response.headers.append(HeaderName::Vary, "Content-Language".into());
 
     let request_etag = if let Some(etag) = request.headers.get(&HeaderName::IfNoneMatch) {
         etag.as_str_no_convert()
@@ -296,8 +295,8 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
                     match find_best_match_in_weighted_list(accepted_languages, &["nl", "en"], 0.0) {
                         Some(0) => {
                             response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
-                            response.headers.set(HeaderName::ContentLanguage, "nl".into());
-                            response.headers.set(HeaderName::ETag, "welcome-nl".into());
+                            response.headers.append_or_override(HeaderName::ContentLanguage, "nl".into());
+                            response.headers.append_or_override(HeaderName::ETag, "welcome-nl".into());
                             if request_etag == Some("welcome-nl") {
                                 return serve_welcome_page_not_modified(request);
                             }
@@ -312,7 +311,7 @@ async fn handle_welcome_page(request: &Request, request_target: &str) -> Respons
         "/welcome.en.html" => (),
         "/welcome.nl.html" => {
             response.body = Some(BodyKind::StaticString(static_resources::WELCOME_HTML_NL));
-            response.headers.set(HeaderName::ContentLanguage, "nl".into());
+            response.headers.append_or_override(HeaderName::ContentLanguage, "nl".into());
         }
         _ => return Response::with_status_and_string_body(StatusCode::NotFound, "Not Found"),
     }
@@ -357,7 +356,7 @@ async fn serve_file_from_disk(path: &Path) -> Option<Response> {
     }
 
     response.body = Some(BodyKind::File { handle: file, metadata });
-    response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+    response.headers.append_or_override(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
 
     Some(response)
 }
@@ -396,23 +395,23 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
     };
 
     if let Some(encoding) = encoding {
-        response.headers.set(HeaderName::ContentEncoding, encoding.into());
+        response.headers.append_or_override(HeaderName::ContentEncoding, encoding.into());
     }
 
     if let Some(media_type) = cached.media_type.clone() {
-        response.headers.set(HeaderName::ContentType, HeaderValue::from(media_type));
+        response.headers.append_or_override(HeaderName::ContentType, HeaderValue::from(media_type));
     } else {
-        response.headers.set(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
+        response.headers.append_or_override(HeaderName::ContentType, HeaderValue::from(MediaType::from_path(path.to_string_lossy().as_ref()).clone()));
     }
 
-    response.headers.set(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
+    response.headers.append_or_override(HeaderName::CacheStatus, "ServenteCache; hit; detail=MEMORY".into());
     if let Some(modified_date) = cached.modified_date {
         response.headers.set_last_modified(modified_date);
     }
 
     if let Some(CachedFileDetails::Document { link_preloads }) = &cached.cache_details{
         for link_preload in link_preloads {
-            response.headers.append_possible_duplicate(HeaderName::Link, link_preload.clone().into());
+            _ = response.headers.append(HeaderName::Link, link_preload.clone().into());
         }
     }
 
@@ -424,14 +423,14 @@ fn serve_file_from_cache(request: &Request, path: &Path) -> Option<Response> {
 /// Serve the welcome page response with a 304 Not Modified status code.
 fn serve_welcome_page_not_modified(request: &Request) -> Response {
     let mut response = Response::with_status(StatusCode::NotModified);
-    response.headers.set(HeaderName::Vary, "Content-Language".into());
+    response.headers.append_or_override(HeaderName::Vary, "Content-Language".into());
 
     if let Some(etag) = request.headers.get(&HeaderName::ETag) {
-        response.headers.set(HeaderName::ETag, etag.clone());
+        response.headers.append_or_override(HeaderName::ETag, etag.clone());
     }
 
     if let Some(if_modified_since) = request.headers.get(&HeaderName::ETag) {
-        response.headers.set(HeaderName::LastModified, if_modified_since.clone());
+        response.headers.append_or_override(HeaderName::LastModified, if_modified_since.clone());
     }
 
     response

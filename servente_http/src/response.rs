@@ -3,6 +3,8 @@
 
 use std::borrow::Cow;
 
+use servente_resources::MediaType;
+
 use crate::{
     BodyKind,
     HeaderMap,
@@ -36,7 +38,7 @@ impl Response {
 
     pub fn with_status_and_string_body(status: StatusCode, body: impl Into<Cow<'static, str>>) -> Self {
         let mut headers = HeaderMap::new();
-        headers.set(HeaderName::ContentType, HeaderValue::from("text/plain; charset=utf-8"));
+        headers.append_or_override(HeaderName::ContentType, HeaderValue::from(MediaType::PLAIN_TEXT));
         Self {
             prelude_response: Vec::new(),
             version: HttpVersion::Http11,

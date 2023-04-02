@@ -581,7 +581,7 @@ impl Connection {
             0
         };
 
-        response.headers.set(HeaderName::ContentLength, content_length.into());
+        response.headers.append_or_override(HeaderName::ContentLength, content_length.into());
 
         let payload = self.header_compressor.compress(&response);
         self.send_frame(Frame::Headers { end_headers: true, end_stream: content_length == 0, stream_id, payload }).await?;

@@ -87,15 +87,15 @@ impl HandlerController {
             .intersperse(", ")
             .collect();
 
-        response.headers.set(HeaderName::Allow, allowed_methods.clone().into());
-        response.headers.set(HeaderName::AccessControlAllowMethods, allowed_methods.into());
+        response.headers.append_or_override(HeaderName::Allow, allowed_methods.clone().into());
+        _ = response.headers.append(HeaderName::AccessControlAllowMethods, allowed_methods.into());
 
         // TODO list the allowed origin here.
-        response.headers.set(HeaderName::AccessControlAllowOrigin, "localhost:8080".into());
+        _ = response.headers.append(HeaderName::AccessControlAllowOrigin, "localhost:8080".into());
 
         // Read more at [resourcepolicy.fyi](https://resourcepolicy.fyi/)
-        response.headers.set(HeaderName::CrossOriginResourcePolicy, "same-site".into());
-        response.headers.set(HeaderName::Vary, "Origin".into());
+        response.headers.append_or_override(HeaderName::CrossOriginResourcePolicy, "same-site".into());
+        _ = response.headers.append(HeaderName::Vary, "Origin".into());
 
         Some(response)
     }
