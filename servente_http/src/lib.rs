@@ -48,3 +48,15 @@ pub enum BodyKind {
     StaticString(&'static str),
     String(String),
 }
+
+impl From<&'static str> for BodyKind {
+    fn from(value: &'static str) -> Self {
+        Self::StaticString(value)
+    }
+}
+
+impl From<String> for BodyKind {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}

@@ -1,8 +1,6 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::borrow::Cow;
-
 use servente_resources::MediaType;
 
 use crate::{
@@ -36,7 +34,7 @@ impl Response {
         }
     }
 
-    pub fn with_status_and_string_body(status: StatusCode, body: impl Into<Cow<'static, str>>) -> Self {
+    pub fn with_status_and_string_body(status: StatusCode, body: impl Into<BodyKind>) -> Self {
         let mut headers = HeaderMap::new();
         headers.append_or_override(HeaderName::ContentType, HeaderValue::from(MediaType::PLAIN_TEXT));
         Self {
@@ -44,10 +42,7 @@ impl Response {
             version: HttpVersion::Http11,
             status,
             headers,
-            body: match body.into() {
-                Cow::Owned(body) => Some(BodyKind::String(body)),
-                Cow::Borrowed(body) => Some(BodyKind::StaticString(body)),
-            },
+            body: Some(body.into()),
         }
     }
 
