@@ -710,12 +710,9 @@ async fn read_request_line<R>(stream: &mut R) -> Result<(Method, RequestTarget, 
     let method = Method::from(read_string_until_character(stream, b' ', MaximumLength::METHOD, HttpParseError::MethodTooLarge,
         |b| if syntax::is_token_character(b) { Ok(()) } else { dbg!(b); Err(HttpParseError::InvalidOctetInMethod) }).await?);
 
-    // TODO skip OWS
     let target = read_request_target(stream).await?;
-
-    // TODO skip OWS
-
     let version = read_http_version(stream).await?;
+
     consume_crlf(stream).await?;
 
     Ok((method, target, version))
