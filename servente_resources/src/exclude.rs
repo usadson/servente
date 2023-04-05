@@ -24,6 +24,7 @@ static DISALLOWED_RESPONSE_FILE_EXTENSIONS: phf::Set<UniCase<&'static str>> = ph
     UniCase::ascii("db"),               // Database files
     UniCase::ascii("der"),              // Certificate files
     UniCase::ascii("gitignore"),        // Git ignore files (might be used to find hidden files)
+    UniCase::ascii("htaccess"),         // Apache configuration files
     UniCase::ascii("key"),              // Certificate files
     UniCase::ascii("lock"),             // Lock files
     UniCase::ascii("log"),              // Log files
