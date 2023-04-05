@@ -39,3 +39,6 @@ rustls = [
     "dep:rustls",
     "dep:tokio-rustls",
 ]
+
+[[bin]]
+name = "servente-http1-custom-bencher-handle-exchange"

@@ -252,7 +252,7 @@ async fn discard_request(stream: &mut TcpStream) -> Result<(), Error> {
 
 /// Reads a single response, handles it and sends the response back to the
 /// client.
-async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, settings: &ServenteSettings) -> Result<(), ExchangeError>
+pub async fn handle_exchange<R, W>(reader: &mut R, writer: &mut W, settings: &ServenteSettings) -> Result<(), ExchangeError>
         where R: AsyncBufReadExt + Unpin,
               W: AsyncWriteExt + Unpin {
     #[cfg(feature = "debugging")]
