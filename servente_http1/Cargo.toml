@@ -27,10 +27,13 @@ tempfile = "*"
 servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
 
 [features]
-default = ["convert-markdown"]
+default = ["convert-markdown", "http2", "rustls"]
 debugging = []
 convert-markdown = ["servente_http_handling/convert-markdown"]
-http2 = ["dep:servente_http2"]
+http2 = [
+    "dep:servente_http2",
+    "servente_http_handling/http2",
+]
 io_uring = [
     "dep:tokio-uring",
 ]
@@ -38,4 +41,6 @@ ktls = ["dep:ktls"]
 rustls = [
     "dep:rustls",
     "dep:tokio-rustls",
+    "servente_http_handling/rustls",
+    "servente_http2?/rustls",
 ]

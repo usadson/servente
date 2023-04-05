@@ -5,6 +5,7 @@ members = [
     "collaudatrice",
     "servente",
     "servente_common",
+    "servente-feed",
     "servente_generator",
     "servente_http",
     "servente_http_handling",

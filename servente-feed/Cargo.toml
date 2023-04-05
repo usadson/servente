@@ -1,0 +1,13 @@
+[package]
+name = "servente-feed"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+quick-xml = { version = "*" }
+
+servente_resources = { path = "../servente_resources" }
+
+[features]
+
