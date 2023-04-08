@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CI_FEATURES: servente/analysis,servente/convert-markdown,servente/http2,servente/watch
 
 jobs:
   build:
@@ -15,14 +16,15 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         profile: [dev, release]
+        features: ["servente/boring", "servente/rustls"]
 
     runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v3
     - name: Build
-      run: cargo build --verbose --locked --profile ${{ matrix.profile }}
+      run: cargo build --verbose --locked --profile ${{ matrix.profile }} --no-default-features --features ${{ env.CI_FEATURES }} --features ${{ matrix.features }}
     - name: Run tests
-      run: cargo test --verbose --locked --profile ${{ matrix.profile }}
+      run: cargo test --verbose --locked --profile ${{ matrix.profile }} --no-default-features --features ${{ env.CI_FEATURES }} --features ${{ matrix.features }}
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
