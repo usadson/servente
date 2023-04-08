@@ -17,17 +17,26 @@ All notable changes to this project will be documented in this file.
 - Added integration tests for *HTTP/1.x* using **cURL**.
 - Added support for [BoringSSL](https://boringssl.googlesource.com/boringssl/), use the `tls-boring` feature flag
 - Added experimental support for plaintext HTTP
+  - Disable the `rustls` feature
+- Support for HTTP/2 trailers
+- General performance improvements:
+  - Support `Arc<str>` in headers to share with the dynamic table
+  - Use `write!` instead of `String::push_str(format!(...))`
 
 ### Changed
 - Restructure repository for multi-crate config (Cargo workspace)
 - Methods are now **case-sensitive**, as this conforms to the spec
   ([RFC 9110 Section 9.1](https://www.rfc-editor.org/rfc/rfc9110.html#section-9.1-5))
+- Streamline HTTP parsing for shared semantics (e.g. `request-target`)
+- More tests are added to prove code works at build-time, and still works after (internal) changes
+- Mask `.htaccess` files so they now also return **`404 Not Found`**
 
 ### Fixed
 - **ALPN** and **`Alt-Svc`** weren't based on feature detection, so for example
   HTTP/2 would be listed on there, but wouldn't actually be available.
 - Broken `Accept-Language` parsing for welcome pages
 - Broken **HTTP/2** upgrade, this is now tested
+- HTTP/2 is now almost fully supported and very usable
 - Failing builds for builds without the `convert-markdown` feature flag
 
 ## [0.2.0](https://github.com/usadson/servente/releases/tag/v0.2.0) - 2023-03-26
