@@ -1,0 +1,9 @@
+[package]
+name = "servente-infra"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+
+[features]
