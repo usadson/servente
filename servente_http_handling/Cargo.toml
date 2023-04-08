@@ -6,6 +6,8 @@ version.workspace = true
 
 [dependencies]
 anyhow = "*"
+async-trait = "*"
+dyn-clone = "*"
 httpdate = "*"
 itertools = "*"
 rustls = { version = "*", features = ["quic", "secret_extraction"], optional = true }

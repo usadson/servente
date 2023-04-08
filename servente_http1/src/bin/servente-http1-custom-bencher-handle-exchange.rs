@@ -30,6 +30,7 @@ async fn handle_exchange() {
         handler_controller: HandlerController::new(),
         read_body_timeout: Duration::from_secs(2),
         read_headers_timeout: Duration::from_secs(2),
+        middleware: Vec::new(),
     }).await.unwrap();
 }
 

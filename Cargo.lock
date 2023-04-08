@@ -142,6 +142,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.68"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9ccdd8f2a161be9bd5c023df56f1b2a0bd1d83872ae53b71a84a12c9bf6e842"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.11",
+]
+
+[[package]]
 name = "atomic"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -531,6 +542,12 @@ checksum = "bde03329ae10e79ede66c9ce4dc930aa8599043b0743008548680f25b91502d6"
 dependencies = [
  "dtoa",
 ]
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68b0cf012f1230e43cd00ebb729c6bb58707ecfa8ad08b52ef3a4ccd2697fc30"
 
 [[package]]
 name = "ego-tree"
@@ -1915,6 +1932,7 @@ dependencies = [
  "rustls",
  "rustls-pemfile",
  "scraper",
+ "servente-cgi",
  "servente_generator",
  "servente_http",
  "servente_http1",
@@ -1928,6 +1946,17 @@ dependencies = [
  "tokio-rustls",
  "tokio-uring",
  "unicase",
+]
+
+[[package]]
+name = "servente-cgi"
+version = "0.2.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "servente_http",
+ "servente_http_handling",
+ "servente_resources",
 ]
 
 [[package]]
@@ -2018,7 +2047,9 @@ name = "servente_http_handling"
 version = "0.2.1"
 dependencies = [
  "anyhow",
+ "async-trait",
  "boring",
+ "dyn-clone",
  "httpdate",
  "itertools",
  "rustls",

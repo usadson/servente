@@ -26,6 +26,7 @@ ktls = { version = "*", optional = true }
 boring = { workspace = true, optional = true }
 tokio-boring = { workspace = true, optional = true }
 
+servente-cgi = { version = "*", path = "../servente-cgi", optional = true, default-features = false }
 servente_generator = { version = "*", path = "../servente_generator", default-features = false }
 servente_resources = { version = "*", path = "../servente_resources" }
 servente_http = { version = "*", path = "../servente_http", default-features = false }
@@ -40,6 +41,7 @@ rstest = "*"
 [features]
 default = [
     "analysis",
+    "cgi",
     "convert-markdown",
     "http2",
     "rustls",
@@ -49,6 +51,10 @@ default = [
 # Analyze files
 analysis = [
     "dep:scraper"
+]
+
+cgi = [
+    "dep:servente-cgi",
 ]
 
 # Convert Markdown to HTML (does not replace original file)

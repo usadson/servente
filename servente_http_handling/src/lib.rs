@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod handler;
+pub mod middleware;
 pub mod responses;
 
 use std::{
@@ -11,6 +12,7 @@ use std::{
     time::SystemTime, env::current_dir,
 };
 
+use middleware::ExchangeState;
 use servente_http::{HttpParseError, lists::find_best_match_in_weighted_list};
 
 use servente_http::*;
@@ -20,6 +22,8 @@ pub use config::{
     ServenteConfig,
     ServenteSettings,
 };
+
+pub use middleware::Middleware;
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
 fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Option<Response> {
@@ -156,6 +160,53 @@ pub async fn handle_parse_error(error: HttpParseError) -> Response {
 
 /// Handles a request.
 pub async fn handle_request(request: &Request, settings: &ServenteSettings) -> Response {
+    let mut exchange_state = ExchangeState {
+        request,
+        response: handle_request_inner(request, settings).await,
+    };
+
+    for middleware in &settings.middleware {
+        let mut middleware = Arc::clone(middleware);
+        let middleware = dyn_clone::arc_make_mut(&mut middleware);
+
+        if let Err(e) = middleware.invoke(&mut exchange_state).await {
+            #[cfg(debug_assertions)]
+            match e {
+                middleware::MiddlewareError::RecoverableError(e) => {
+                    println!("[Middleware] Recoverable error in middleware occurred: {}", e);
+                }
+
+                middleware::MiddlewareError::UnrecoverableError(e) => {
+                    return Response::with_status_and_string_body(StatusCode::ServiceUnavailable,
+                        format!(
+                            concat!(
+                                "<h1>Service Unavailable</h1>",
+                                "<hr>",
+                                "<p>An internal error occurred whilst processing your request in middleware: <b>{}</b></p>",
+                                "<h2>Error Information</h2>",
+                                "<pre>{}</pre>"
+                            ),
+                            middleware.debug_identifier(),
+                            e
+                        )
+                    );
+                }
+            }
+
+            #[cfg(not(debug_assertions))]
+            match e {
+                middleware::MiddlewareError::RecoverableError(_) => (),
+                middleware::MiddlewareError::UnrecoverableError(_) => {
+                    return Response::with_status_and_string_body(StatusCode::ServiceUnavailable, "Service Unavailable");
+                }
+            }
+        }
+    }
+
+    exchange_state.response
+}
+
+async fn handle_request_inner(request: &Request, settings: &ServenteSettings) -> Response {
     if request.method == Method::Options {
         return handle_options(request, settings).await;
     }

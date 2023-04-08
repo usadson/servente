@@ -11,6 +11,7 @@ members = [
     "servente_http2",
     "servente_http3",
     "servente_resources",
+    "servente-cgi",
     "servente-self-signed-cert",
 ]
 
