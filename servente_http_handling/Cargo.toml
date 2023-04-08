@@ -17,6 +17,7 @@ tokio-boring = { workspace = true, optional = true }
 
 servente_http = { version = "*", path = "../servente_http" }
 servente_resources = { version = "*", path = "../servente_resources" }
+servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
 
 [features]
 default = ["convert-markdown"]

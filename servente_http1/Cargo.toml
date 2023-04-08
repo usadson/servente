@@ -27,7 +27,6 @@ servente_resources = { version = "*", path = "../servente_resources" }
 [dev-dependencies]
 rstest = "*"
 tempfile = "*"
-servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
 
 [features]
 default = ["convert-markdown"]

@@ -19,47 +19,13 @@ fn setup_configuration() -> ServenteConfig {
     let wwwroot_path = temp_dir.path().join("wwwroot");
     DirBuilder::new().create(&wwwroot_path).unwrap();
 
-
-    #[cfg(feature = "rustls")]
-    let tls_config = {
-        let cert_data = servente_self_signed_cert::load_certificate_locations();
-        let mut tls_config = rustls::ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(cert_data.certs, cert_data.private_key)
-            .expect("Failed to build rustls configuration!");
-
-        tls_config.alpn_protocols = vec!["http/1.1".into()];
-
-        tls_config
-    };
-
-    #[cfg(feature = "tls-boring")]
-    let tls_config = {
-        use boring::ssl;
-
-        let server = ssl::SslMethod::tls_server();
-        let mut ssl_builder = boring::ssl::SslAcceptor::mozilla_modern(server).unwrap();
-        ssl_builder.set_default_verify_paths().unwrap();
-        ssl_builder.set_verify(ssl::SslVerifyMode::NONE);
-        ssl_builder.build()
-    };
-
     let handler_controller = handler::HandlerController::new();
 
-    ServenteConfig {
-        #[cfg(feature = "rustls")]
-        tls_config: std::sync::Arc::new(tls_config),
-
-        #[cfg(feature = "tls-boring")]
-        tls_config,
-
-        settings: ServenteSettings {
-            handler_controller,
-            read_headers_timeout: Duration::from_secs(10),
-            read_body_timeout: Duration::from_secs(10),
-        },
-    }
+    ServenteConfig::new(ServenteSettings {
+        handler_controller,
+        read_headers_timeout: Duration::from_secs(10),
+        read_body_timeout: Duration::from_secs(10),
+    })
 }
 
 async fn start_server_in_background() -> AbortHandle {

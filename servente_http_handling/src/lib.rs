@@ -1,10 +1,10 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+pub mod config;
 pub mod handler;
 pub mod responses;
 
-use std::time::Duration;
 use std::{
     path::Path,
     sync::Arc,
@@ -16,32 +16,10 @@ use servente_http::{HttpParseError, lists::find_best_match_in_weighted_list};
 use servente_http::*;
 use servente_resources::{MediaType, static_resources, CachedFileDetails, cache};
 
-#[derive(Clone)]
-pub struct ServenteConfig {
-    #[cfg(feature = "rustls")]
-    pub tls_config: Arc<rustls::ServerConfig>,
-
-    #[cfg(feature = "tls-boring")]
-    pub tls_config: boring::ssl::SslAcceptor,
-
-    pub settings: ServenteSettings,
-}
-
-#[derive(Clone)]
-pub struct ServenteSettings {
-    pub handler_controller: handler::HandlerController,
-
-    /// If the client doesn't transmit the full request-line and headers within
-    /// this time, the request is terminated.
-    pub read_headers_timeout: Duration,
-
-    /// If the client doesn't transmit the full body within
-    /// this time, the request is terminated.
-    pub read_body_timeout: Duration,
-}
-
-unsafe impl Send for ServenteConfig {}
-unsafe impl Sync for ServenteConfig {}
+pub use config::{
+    ServenteConfig,
+    ServenteSettings,
+};
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
 fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Option<Response> {
