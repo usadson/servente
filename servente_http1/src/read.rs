@@ -90,7 +90,7 @@ pub(crate) async fn read_crlf_line<R>(stream: &mut R, maximum_length: MaximumLen
 }
 
 /// Reads the headers from the stream.
-pub(crate) async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
+pub async fn read_headers<R>(stream: &mut R) -> Result<HeaderMap, Error>
         where R: AsyncBufReadExt + Unpin {
     let mut header_map = HeaderMap::new();
 

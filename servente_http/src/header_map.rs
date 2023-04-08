@@ -114,6 +114,15 @@ impl HeaderMap {
     }
 }
 
+impl IntoIterator for HeaderMap {
+    type Item = (HeaderName, HeaderValue);
+    type IntoIter = hashbrown::hash_map::IntoIter<HeaderName, HeaderValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.headers.into_iter()
+    }
+}
+
 /// While most duplicate header fields can be concatenated with a comma, some
 /// header fields are explictly not interpretable as lists, for example the
 /// `Content-Length` field.

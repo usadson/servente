@@ -1955,8 +1955,10 @@ dependencies = [
  "anyhow",
  "async-trait",
  "servente_http",
+ "servente_http1",
  "servente_http_handling",
  "servente_resources",
+ "tokio",
 ]
 
 [[package]]
