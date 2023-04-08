@@ -89,19 +89,31 @@ impl<T> WriteExtensions for T where T: Write {
     }
 }
 
-fn compress_status_code(data: &mut Vec<u8>, status_code: StatusCode) {
+fn compress_status_code(data: &mut Vec<u8>, status_code: StatusCode) -> Result<(), std::io::Error> {
     for (idx, entry) in STATIC_TABLE.iter().enumerate() {
         if let StaticTableEntry::Status(static_status) = entry {
             if *static_status == status_code {
                 data.push(0x80 | idx as u8);
-                return;
+                return Ok(());
             }
         }
     }
 
     // Literal Header Field without Indexing — Indexed Name
-    data.push(8);
-    _ = data.write_hpack_number(3, 7, 0);
+    // Indexed name is entry #8 (i.e.: `:status, 200`)
+    data.write_hpack_number(8, 4, 0)?;
+
+    // Ugly string to status code conversion, but it's safe
+    let status_code = status_code as u16;
+    let string = &[
+        b'0' + (status_code / 100) as u8,
+        b'0' + (status_code % 100 / 10) as u8,
+        b'0' + (status_code % 10) as u8,
+    ];
+
+    let string = std::str::from_utf8(string)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    data.write_hpack_string_huffman(string)
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -152,7 +164,11 @@ impl Compressor {
     pub fn compress(&mut self, response: &Response) -> Vec<u8> {
         let mut data = Vec::new();
 
-        compress_status_code(&mut data, response.status);
+        // TODO propagate errors. Even thoughs errors in compressing (not
+        //      writing!) are very unlikely, it is still proper to do, so
+        //      clients don't get malformed data.
+
+        _ = compress_status_code(&mut data, response.status);
         for (header_name, header_value) in response.headers.iter() {
             let header_value_as_str = header_value.to_string();
             match self.find_header(header_name, header_value, &header_value_as_str) {
@@ -240,6 +256,7 @@ pub enum DecompressionError {
     InvalidRequestTarget,
 
     HeaderMapInsertionError(HeaderMapInsertionError),
+    InvalidUtf8,
 }
 
 impl From<DynamicTableLookupError> for DecompressionError {
@@ -1010,10 +1027,10 @@ async fn decode_hpack_sink<S>(mut request: super::HeadersInTransit, dynamic_tabl
         if first_octet & 0x40 == 0x40 {
             // Literal Header Field with Incremental Indexing — New Name
             if first_octet == 0x40 {
-                let name = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+                let name = request.read_string()?;
                 validate_header_name(&name)?;
 
-                let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+                let value = request.read_string()?;
                 validate_header_value(&value)?;
 
                 let value = Arc::from(value);
@@ -1029,7 +1046,7 @@ async fn decode_hpack_sink<S>(mut request: super::HeadersInTransit, dynamic_tabl
                 return Err(DecompressionError::UnexpectedEndOfFile);
             };
 
-            let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+            let value = request.read_string()?;
             match dynamic_table.get(index, Some(value))? {
                 DynamicTableEntry::Authority(val) => {
                     dynamic_table.insert(DynamicTableEntry::Authority(val.clone()));
@@ -1078,10 +1095,10 @@ async fn decode_hpack_sink<S>(mut request: super::HeadersInTransit, dynamic_tabl
         if first_octet & 0x10 == 0x10 {
             if first_octet == 0x10 {
                 // Literal Header Field Never Indexed — New Name
-                let name = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+                let name = request.read_string()?;
                 validate_header_name(&name)?;
 
-                let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+                let value = request.read_string()?;
                 validate_header_value(&value)?;
 
                 let header = (HeaderName::from(name), HeaderValue::from(value));
@@ -1095,7 +1112,7 @@ async fn decode_hpack_sink<S>(mut request: super::HeadersInTransit, dynamic_tabl
                 return Err(DecompressionError::UnexpectedEndOfFile);
             };
 
-            let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+            let value = request.read_string()?;
             validate_header_value(&value)?;
 
             let entry = dynamic_table.get(index, Some(value))?;
@@ -1125,10 +1142,10 @@ async fn decode_hpack_sink<S>(mut request: super::HeadersInTransit, dynamic_tabl
 
         // Literal Header Field without Indexing — New Name
         if first_octet == 0 {
-            let name = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+            let name = request.read_string()?;
             validate_header_name(&name)?;
 
-            let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+            let value = request.read_string()?;
             validate_header_value(&value)?;
 
             let header = (HeaderName::from(name), HeaderValue::from(value));
@@ -1143,7 +1160,7 @@ async fn decode_hpack_sink<S>(mut request: super::HeadersInTransit, dynamic_tabl
             return Err(DecompressionError::UnexpectedEndOfFile);
         };
 
-        let value = request.read_string().ok_or(DecompressionError::UnexpectedEndOfFile)?;
+        let value = request.read_string()?;
         validate_header_value(&value)?;
 
         let entry = dynamic_table.get(index, Some(value))?;
@@ -1710,7 +1727,7 @@ mod tests {
             headers: vec![Vec::from(input)],
             cursor: 0,
         };
-        assert_eq!(headers_in_transit.read_string().as_deref(), Some(expected));
+        assert_eq!(headers_in_transit.read_string().as_deref(), Ok(expected));
     }
 
     /// A test for the HPACK example C.4.1. First Request
@@ -1806,5 +1823,14 @@ mod tests {
     #[test]
     fn test_validate_header(#[case] header: (HeaderName, HeaderValue), #[case] expected_result: Result<(), DecompressionError>) {
         assert_eq!(validate_header(&header), expected_result);
+    }
+
+    #[rstest]
+    #[case(StatusCode::Ok, &[0x88])]
+    #[case(StatusCode::BadGateway, &[0x08, 0x82, 0x6C, 0x02])]
+    fn test_compress_status_code(#[case] status_code: StatusCode, #[case] expected: &[u8]) {
+        let mut result = Vec::new();
+        compress_status_code(&mut result, status_code).unwrap();
+        assert_eq!(result.as_slice(), expected);
     }
 }

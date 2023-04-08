@@ -151,30 +151,34 @@ impl HeadersInTransit {
         }
     }
 
-    fn read_string(&mut self) -> Option<String> {
+    fn read_string(&mut self) -> Result<String, hpack::DecompressionError> {
         let Some(first_octet) = self.read_u8() else {
-            return None;
+            return Err(hpack::DecompressionError::UnexpectedEndOfFile);
         };
 
         let is_huffman = first_octet & 0x80 == 0x80;
         let Some(length) = self.read_integer(first_octet & 0x7F, 7) else {
-            return None
+            return Err(hpack::DecompressionError::UnexpectedEndOfFile);
         };
 
         let mut vec = Vec::new();
         for _ in 0..length {
             let Some(byte) = self.read_u8() else {
-                return None;
+                return Err(hpack::DecompressionError::UnexpectedEndOfFile);
             };
 
             vec.push(byte);
         }
 
         if !is_huffman {
-            return String::from_utf8(vec).ok();
+            return String::from_utf8(vec).map_err(|err| {
+                #[cfg(debug_assertions)]
+                println!("[HTTP/2] HPACK/HeadersInTransit: Invalid UTF-8: {}", err.utf8_error());
+                hpack::DecompressionError::InvalidUtf8
+            });
         }
 
-        hpack::decode_huffman(vec.as_slice())
+        hpack::decode_huffman(vec.as_slice()).ok_or(hpack::DecompressionError::UnexpectedEndOfFile)
     }
 }
 
