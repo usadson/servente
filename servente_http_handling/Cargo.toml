@@ -17,7 +17,7 @@ tokio-boring = { workspace = true, optional = true }
 
 servente_http = { version = "*", path = "../servente_http" }
 servente_resources = { version = "*", path = "../servente_resources" }
-servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
+servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert", optional = true }
 
 [features]
 default = ["convert-markdown"]
@@ -29,9 +29,13 @@ http2 = []
 http3 = []
 rustls = [
     "dep:rustls",
+    "dep:servente_self_signed_cert",
+    "servente_self_signed_cert?/tls-rustls",
 ]
 
 tls-boring = [
     "dep:boring",
     "dep:tokio-boring",
+    "dep:servente_self_signed_cert",
+    "servente_self_signed_cert?/tls-boring",
 ]

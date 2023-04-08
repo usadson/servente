@@ -35,7 +35,7 @@ async fn begin() -> io::Result<()> {
     let mut handler_controller = handler::HandlerController::new();
     example_handlers::register(&mut handler_controller);
 
-    let config = ServenteConfig::new(ServenteSettings {
+    let config = ServenteConfig::new().build(ServenteSettings {
         handler_controller,
         read_headers_timeout: Duration::from_secs(45),
         read_body_timeout: Duration::from_secs(60),

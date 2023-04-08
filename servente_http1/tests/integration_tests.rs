@@ -21,11 +21,13 @@ fn setup_configuration() -> ServenteConfig {
 
     let handler_controller = handler::HandlerController::new();
 
-    ServenteConfig::new(ServenteSettings {
-        handler_controller,
-        read_headers_timeout: Duration::from_secs(10),
-        read_body_timeout: Duration::from_secs(10),
-    })
+    ServenteConfig::new()
+        .with_alpn_list(&["http/1.1"])
+        .build(ServenteSettings {
+            handler_controller,
+            read_headers_timeout: Duration::from_secs(10),
+            read_body_timeout: Duration::from_secs(10),
+        })
 }
 
 async fn start_server_in_background() -> AbortHandle {
@@ -40,13 +42,19 @@ async fn test_curl_integration() {
     start_server_in_background().await;
     tokio::task::yield_now().await;
 
+    #[cfg(not(any(feature = "rustls", feature = "tls-boringssl")))]
+    const URL: &str = "http://localhost:40626/";
+
+    #[cfg(any(feature = "rustls", feature = "tls-boringssl"))]
+    const URL: &str = "https://localhost:40626/";
+
     async fn run_curl() -> Result<Output, tokio::time::error::Elapsed> {
         let fut = tokio::task::spawn_blocking(|| {
             Command::new("curl")
                 .arg("-k") // Insecure, since the certificate is self-signed
                 .arg("-i") // Include data
                 .arg("-v") // Verbose
-                .arg("https://localhost:40626/")
+                .arg(URL)
                 .spawn()
                 .expect("Failed to invoke curl")
                 .wait_with_output()

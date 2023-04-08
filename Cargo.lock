@@ -1922,7 +1922,6 @@ dependencies = [
  "servente_http3",
  "servente_http_handling",
  "servente_resources",
- "servente_self_signed_cert",
  "strum_macros",
  "tokio",
  "tokio-boring",

@@ -15,19 +15,39 @@ pub struct ServenteConfig {
 }
 
 impl ServenteConfig {
+    pub fn new() -> ServenteConfigBuilder<&'static [&'static str]> {
+        ServenteConfigBuilder {
+            alpn_list: determine_alpn_protocols()
+        }
+    }
+}
 
-    pub fn new(settings: ServenteSettings) -> Self {
-        Self {
+pub struct ServenteConfigBuilder<T> {
+    alpn_list: T,
+}
+
+impl<T> ServenteConfigBuilder<T>
+        where T: AsRef<[&'static str]> {
+    pub fn build(self, settings: ServenteSettings) -> ServenteConfig {
+        #[cfg(not(any(feature = "rustls", feature = "tls-boring")))]
+        { _ = self.alpn_list }
+
+        ServenteConfig {
             #[cfg(feature = "rustls")]
-            tls_config: std::sync::Arc::new(create_tls_config_rustls()),
+            tls_config: std::sync::Arc::new(create_tls_config_rustls(self.alpn_list.as_ref())),
 
             #[cfg(feature = "tls-boring")]
-            tls_config: create_tls_config_boring(),
+            tls_config: create_tls_config_boring(self.alpn_list.as_ref()),
 
-            settings
+            settings,
         }
     }
 
+    pub fn with_alpn_list<U>(self, list: U) -> ServenteConfigBuilder<U> {
+        ServenteConfigBuilder::<U> {
+            alpn_list: list,
+        }
+    }
 }
 
 unsafe impl Send for ServenteConfig {}
@@ -47,7 +67,7 @@ pub struct ServenteSettings {
 }
 
 #[cfg(feature = "tls-boring")]
-fn create_tls_config_boring() -> boring::ssl::SslAcceptor {
+fn create_tls_config_boring(alpn_list: &[&'static str]) -> boring::ssl::SslAcceptor {
     use boring::ssl;
 
     let cert_data = servente_self_signed_cert::load_certificate_locations();
@@ -62,7 +82,7 @@ fn create_tls_config_boring() -> boring::ssl::SslAcceptor {
     ssl_builder.set_default_verify_paths().expect("Failed to set default verify paths");
     ssl_builder.set_verify(ssl::SslVerifyMode::NONE);
     ssl_builder.enable_ocsp_stapling();
-    ssl_builder.set_alpn_protos(&determine_alpn_protocols_boring()).expect("Failed to set ALPN protocols");
+    ssl_builder.set_alpn_protos(&determine_alpn_protocols_boring(alpn_list)).expect("Failed to set ALPN protocols");
     ssl_builder.set_private_key(&private_key).expect("Failed to set the private key");
 
     let mut certs = cert_data.certs.iter()
@@ -82,7 +102,7 @@ fn create_tls_config_boring() -> boring::ssl::SslAcceptor {
 }
 
 #[cfg(feature = "rustls")]
-fn create_tls_config_rustls() -> rustls::ServerConfig {
+fn create_tls_config_rustls(alpn_list: &[&'static str]) -> rustls::ServerConfig {
     let cert_data = servente_self_signed_cert::load_certificate_locations();
 
     let mut tls_config = rustls::ServerConfig::builder()
@@ -92,7 +112,7 @@ fn create_tls_config_rustls() -> rustls::ServerConfig {
         .expect("Failed to build rustls configuration!");
 
     // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
-    tls_config.alpn_protocols = determine_alpn_protocols().iter().map(|str| str.as_bytes().to_owned()).collect();
+    tls_config.alpn_protocols = alpn_list.iter().map(|str| str.as_bytes().to_owned()).collect();
     tls_config.send_half_rtt_data = true;
 
     #[cfg(feature = "ktls")]
@@ -116,8 +136,7 @@ const fn determine_alpn_protocols() -> &'static [&'static str] {
 }
 
 #[cfg(feature = "tls-boring")]
-fn determine_alpn_protocols_boring() -> Vec<u8> {
-    let protocols = determine_alpn_protocols();
+fn determine_alpn_protocols_boring(protocols: &[&'static str]) -> Vec<u8> {
     let length = protocols.iter()
         .map(|str| 1 + str.len())
         .sum();
