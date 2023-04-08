@@ -136,15 +136,7 @@ fn create_tls_config_rustls() -> rustls::ServerConfig {
         .expect("Failed to build rustls configuration!");
 
     // https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids
-    tls_config.alpn_protocols = vec![
-        #[cfg(feature = "http3")]
-        b"h3".to_vec(),
-
-        #[cfg(feature = "http2")]
-        b"h2".to_vec(),
-
-        b"http/1.1".to_vec()
-    ];
+    tls_config.alpn_protocols = determine_alpn_protocols().iter().map(|str| str.as_bytes().to_owned()).collect();
     tls_config.send_half_rtt_data = true;
 
     #[cfg(feature = "ktls")]
