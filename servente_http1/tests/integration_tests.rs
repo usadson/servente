@@ -34,11 +34,26 @@ fn setup_configuration() -> ServenteConfig {
         tls_config
     };
 
+    #[cfg(feature = "tls-boring")]
+    let tls_config = {
+        use boring::ssl;
+
+        let server = ssl::SslMethod::tls_server();
+        let mut ssl_builder = boring::ssl::SslAcceptor::mozilla_modern(server).unwrap();
+        ssl_builder.set_default_verify_paths().unwrap();
+        ssl_builder.set_verify(ssl::SslVerifyMode::NONE);
+        ssl_builder.build()
+    };
+
     let handler_controller = handler::HandlerController::new();
 
     ServenteConfig {
         #[cfg(feature = "rustls")]
         tls_config: std::sync::Arc::new(tls_config),
+
+        #[cfg(feature = "tls-boring")]
+        tls_config,
+
         settings: ServenteSettings {
             handler_controller,
             read_headers_timeout: Duration::from_secs(10),

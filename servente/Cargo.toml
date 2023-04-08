@@ -23,6 +23,9 @@ unicase = "*"
 scraper = { version = "*", optional = true }
 ktls = { version = "*", optional = true }
 
+boring = { workspace = true, optional = true }
+tokio-boring = { workspace = true, optional = true }
+
 servente_generator = { version = "*", path = "../servente_generator", default-features = false }
 servente_resources = { version = "*", path = "../servente_resources" }
 servente_http = { version = "*", path = "../servente_http" }
@@ -30,7 +33,7 @@ servente_http_handling = { version = "*", path = "../servente_http_handling" }
 servente_http1 = { version = "*", path = "../servente_http1" }
 servente_http2 = { version = "*", path = "../servente_http2", optional = true }
 servente_http3 = { version = "*", path = "../servente_http3", optional = true }
-servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert" }
+servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert", optional = true }
 
 [dev-dependencies]
 rstest = "*"
@@ -94,13 +97,25 @@ http3 = [
 rustls = [
     "dep:rustls",
     "dep:tokio-rustls",
+    "dep:servente_self_signed_cert",
     "servente_http_handling/rustls",
     "servente_http1/rustls",
     "servente_http2?/rustls",
+    "servente_self_signed_cert?/tls-rustls",
 ]
 
 server_push = [
     "servente_http2?/server_push"
+]
+
+tls-boring = [
+    "dep:boring",
+    "dep:tokio-boring",
+    "dep:servente_self_signed_cert",
+    "servente_http_handling/tls-boring",
+    "servente_http1/tls-boring",
+    "servente_http2?/tls-boring",
+    "servente_self_signed_cert?/tls-boring",
 ]
 
 # Watch for changes in the filesystem

@@ -14,6 +14,9 @@ tokio = { version = "*", features = ["full"] }
 tokio-rustls = { version = "*", optional = true }
 tokio-uring = { version = "*", optional = true }
 
+boring = { workspace = true, optional = true }
+tokio-boring = { workspace = true, optional = true }
+
 
 servente_common = { version = "*", path = "../servente_common" }
 servente_http = { version = "*", path = "../servente_http" }
@@ -38,6 +41,13 @@ ktls = ["dep:ktls"]
 rustls = [
     "dep:rustls",
     "dep:tokio-rustls",
+]
+
+tls-boring = [
+    "dep:boring",
+    "dep:tokio-boring",
+    "servente_http_handling/tls-boring",
+    "servente_http2?/tls-boring",
 ]
 
 [[bin]]

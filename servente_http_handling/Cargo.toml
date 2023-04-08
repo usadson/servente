@@ -8,9 +8,12 @@ version.workspace = true
 anyhow = "*"
 httpdate = "*"
 itertools = "*"
-rustls = { version = "*", features = ["quic", "secret_extraction"] }
+rustls = { version = "*", features = ["quic", "secret_extraction"], optional = true }
 tokio = { version = "*", features = ["full"] }
 urlencoding = "*"
+
+boring = { workspace = true, optional = true }
+tokio-boring = { workspace = true, optional = true }
 
 servente_http = { version = "*", path = "../servente_http" }
 servente_resources = { version = "*", path = "../servente_resources" }
@@ -23,4 +26,11 @@ convert-markdown = [
 ]
 http2 = []
 http3 = []
-rustls = []
+rustls = [
+    "dep:rustls",
+]
+
+tls-boring = [
+    "dep:boring",
+    "dep:tokio-boring",
+]

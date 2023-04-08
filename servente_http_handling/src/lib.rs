@@ -20,6 +20,10 @@ use servente_resources::{MediaType, static_resources, CachedFileDetails, cache};
 pub struct ServenteConfig {
     #[cfg(feature = "rustls")]
     pub tls_config: Arc<rustls::ServerConfig>,
+
+    #[cfg(feature = "tls-boring")]
+    pub tls_config: boring::ssl::SslAcceptor,
+
     pub settings: ServenteSettings,
 }
 

@@ -1,7 +1,16 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
+#[cfg(feature = "tls-rustls")]
 use rustls::{Certificate, PrivateKey};
+
+#[cfg(feature = "tls-boring")]
+#[derive(Clone, Debug)]
+pub struct Certificate(pub Vec<u8>);
+
+#[cfg(feature = "tls-boring")]
+#[derive(Clone, Debug)]
+pub struct PrivateKey(pub Vec<u8>);
 
 #[derive(Debug)]
 pub struct CertificateData {
@@ -10,7 +19,7 @@ pub struct CertificateData {
 }
 
 #[must_use]
-fn load_data_from_vec_u8(certificate: Vec<u8>, private_key: Vec<u8>) -> CertificateData{
+fn load_data_from_vec_u8(certificate: Vec<u8>, private_key: Vec<u8>) -> CertificateData {
     CertificateData {
         certs: vec![Certificate(certificate)],
         private_key: PrivateKey(private_key),

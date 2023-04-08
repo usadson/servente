@@ -107,7 +107,7 @@ impl<'i> From<&'i str> for Token<'i> {
             }
 
             let level = space_trimmed_start.chars().filter(|c| *c == '#').count();
-            if level != space_trimmed_start.chars().count()  {
+            if level == space_trimmed_start.chars().count()  {
                 return Token::ThematicBreak;
             }
         }

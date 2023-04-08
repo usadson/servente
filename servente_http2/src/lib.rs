@@ -34,11 +34,14 @@ use self::hpack::DynamicTable;
 mod bits;
 pub mod hpack;
 
-#[cfg(not(feature = "rustls"))]
+#[cfg(not(any(feature = "rustls", feature = "tls-boring")))]
 type StreamType = TcpStream;
 
 #[cfg(feature = "rustls")]
 type StreamType = TlsStream<TcpStream>;
+
+#[cfg(feature = "tls-boring")]
+type StreamType = tokio_boring::SslStream<TcpStream>;
 
 type Reader = BufReader<ReadHalf<StreamType>>;
 type Writer = BufWriter<WriteHalf<StreamType>>;

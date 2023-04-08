@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
 - Validate `method` and `request-target` for *HTTP/1.x*
 - Added read timeouts for *HTTP/1.x* to prevent some **Denial of Service**s
 - Added integration tests for *HTTP/1.x* using **cURL**.
+- Added support for [BoringSSL](https://boringssl.googlesource.com/boringssl/), use the `tls-boring` feature flag
+- Added experimental support for plaintext HTTP
 
 ### Changed
 - Restructure repository for multi-crate config (Cargo workspace)

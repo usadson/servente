@@ -33,6 +33,10 @@ lto = true
 debug = true
 
 [workspace.dependencies]
-rustls = { version = "*", features = ["quic", "secret_extraction"] }
 tokio = { version = "*", features = ["full"] }
+
+rustls = { version = "*", features = ["quic", "secret_extraction"] }
 tokio-rustls = "*"
+
+boring = { version = "*" }
+tokio-boring = { version = "*" }

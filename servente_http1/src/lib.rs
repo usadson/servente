@@ -443,7 +443,7 @@ async fn handle_pri_method_http2_not_enabled<W>(writer: &mut W) -> Result<(), Ex
 
 /// Process a single socket connection.
 async fn process_socket(stream: TcpStream, config: ServenteConfig) {
-    #[cfg(feature = "rustls")]
+    #[cfg(any(feature = "rustls", feature = "tls-boring"))]
     let stream = {
         let mut stream = stream;
         let mut buf = [0u8; 4];
@@ -466,8 +466,17 @@ async fn process_socket(stream: TcpStream, config: ServenteConfig) {
             }
         }
 
-        let acceptor = TlsAcceptor::from(Arc::clone(&config.tls_config));
-        match acceptor.accept(stream).await {
+        #[cfg(feature = "rustls")]
+        {
+            let acceptor = TlsAcceptor::from(Arc::clone(&config.tls_config));
+            match acceptor.accept(stream).await {
+                Ok(stream) => stream,
+                Err(_) => return,
+            }
+        }
+
+        #[cfg(feature = "tls-boring")]
+        match tokio_boring::accept(&config.tls_config, stream).await {
             Ok(stream) => stream,
             Err(_) => return,
         }

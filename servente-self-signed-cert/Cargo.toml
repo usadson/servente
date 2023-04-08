@@ -6,5 +6,11 @@ version.workspace = true
 
 [dependencies]
 rcgen = "*"
-rustls = "*"
+
+boring = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+
+[features]
+tls-boring = ["dep:boring"]
+tls-rustls = ["dep:rustls"]
 
