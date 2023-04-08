@@ -19,7 +19,7 @@ The following are goals to be executed within a couple of weeks.
 #### Multimedia
 * Video streaming using [MPEG-DASH](https://en.wikipedia.org/wiki/Dynamic_Adaptive_Streaming_over_HTTP) / [HTTP Live Streaming](https://en.wikipedia.org/wiki/HTTP_Live_Streaming)
 * Image downscaling for large files
-* SVG rasterization
+* Automatic conversion of image formats, e.g. SVG rasterization, JPEG to WebP, etc.
 
 #### Configuration
 * A Git repository acting as `wwwroot`
@@ -30,6 +30,12 @@ The following are goals to be executed within a couple of weeks.
 ## Intermediate-Term Goals
 * Multiple processes handling the same socket, to allow restarting the server without dropping connections
 * For a development environment, inject autoreload script in `HTML` files
+* Support for other TLS libraries, notably [BoringSSL](https://boringssl.googlesource.com/boringssl/) and [s2n](https://github.com/aws/s2n-tls).
+  * [OpenSSL 3](https://openssl.org) would be great to support too, especially
+    because it's widely used and being worked on by many, but since they
+    [won't support QUIC](https://github.com/openssl/openssl/pull/8797), this
+    isn't possible at the time of writing, let alone the possible security
+    implications of using OpenSSL.
 
 ## Long-Term Goals
 These goals are desirable things, but require a lot of work, need extensive
@@ -40,6 +46,7 @@ research, and/or need major infrastructural changes.
 * Kernel-level asynchronous I/O for Linux using [io_uring](https://man.archlinux.org/man/io_uring.7)
 * [Common Gateway Interface](https://en.wikipedia.org/wiki/Common_Gateway_Interface) support, FastCGI support and accelerated PHP for applications like WordPress.
 * [Reverse proxy](https://www.cloudflare.com/learning/cdn/glossary/reverse-proxy/) support
+* Minification of textual resources, notably HTML, JavaScript, CSS and JSON.
 
 ### Reconsiderations
 The following aspects might be reconsidered, when previously marked as `won't be implemented`.
