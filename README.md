@@ -8,27 +8,27 @@ experimentation, the server remains highly performant, delivering
 ⚡ lightning-fast speeds that allow for seamless content delivery.
 
 ## 💡 Feature Support Table
-| Feature                   | Status | Description                                              | Notes                                                                                                 |
-| ------------------------- | ------ | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Accept-Ranges             | ✅     | Accepting range requests (especially useful for video's) | Fully supported                                                                                       |
-| Automatic Certificates    | 🤕     | Automatically create certificates for HTTPS              | Only self-signed at the moment, but we should implement the ACME protocol for supporting LetsEncrypt  |
-| Content-Encoding          | ✅     | Compressing data before sending                          | Fully implemented (brotli and gzip)                                                                   |
-| Custom API handlers       | 🤕     | Experimental API for adding custom handlers              | Experimental                                                                                          |
-| ETag Caching              | ✅     | Cache files using an identifier                          | Based on file modification date                                                                       |
-| HTTP/1.1                  | ✅     | HTTP version every client supports                       | Compliant                                                                                             |
-| HTTP/2                    | ✅     | Improved binary-format HTTP (2015)                       | Beta support                                                                                          |
-| HTTP/2 Server Push        | ❎     | Pushing resources to the client before requested         | Won't be implemented                                                                                  |
-| HTTP/3                    | ❌     | Improved binary-format HTTP (2022) with QUIC (UDP)       | Not implemented yet                                                                                   |
-| HTTP/3 Server Push        | ❎     | Pushing resources to the client before requested         | Won't be implemented                                                                                  |
-| io_uring                  | 🚧     | Asynchronous I/O for Linux                               | Blocked #1                                                                                            |
-| ktls                      | 🚧     | Kernel TLS for Linux and FreeBSD                         | Blocked #2                                                                                            |
-| Last-Modified Caching     | ✅     | Cache files using the modification date                  | Fully supported                                                                                       |
-| Markdown Rendering        | 🤕     | Render Markdown files to HTML                            | Experimental                                                                                          |
-| Memory Cache              | ✅     | Cache files in memory for faster access                  | Uses [`stretto`](https://docs.rs/stretto/latest/stretto/)                                             |
-| OPTIONS method            | ✅     | Detecting server and resource capabilities               | Experimental                                                                                          |
-| TLS                       | ✅     | Transport Layer Security (HTTPS)                         | Uses [`rustls`](https://docs.rs/rustls/latest/rustls/)                                                |
-| Transfer-Encoding         | ✅     | Sending data in chunks                                   | `chunked` encoding is supported                                                                       |
-| WebSockets                | ❌     | Real-time communication between client and server        | Not implemented yet                                                                                   |
+| Feature                   | Status | Description                                              | Notes                                                                                                                 |
+| ------------------------- | ------ | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Accept-Ranges             | ✅     | Accepting range requests (especially useful for video's) | Fully supported                                                                                                       |
+| Automatic Certificates    | 🤕     | Automatically create certificates for HTTPS              | Only self-signed at the moment, but we should implement the ACME protocol for supporting LetsEncrypt                  |
+| Content-Encoding          | ✅     | Compressing data before sending                          | Fully implemented (brotli and gzip)                                                                                   |
+| Custom API handlers       | 🤕     | Experimental API for adding custom handlers              | Experimental                                                                                                          |
+| ETag Caching              | ✅     | Cache files using an identifier                          | Based on file modification date                                                                                       |
+| HTTP/1.1                  | ✅     | HTTP version every client supports                       | Compliant                                                                                                             |
+| HTTP/2                    | ✅     | Improved binary-format HTTP (2015)                       | Largely supported                                                                                                     |
+| HTTP/2 Server Push        | ❎     | Pushing resources to the client before requested         | Won't be implemented                                                                                                  |
+| HTTP/3                    | ❌     | Improved binary-format HTTP (2022) with QUIC (UDP)       | Not implemented yet                                                                                                   |
+| HTTP/3 Server Push        | ❎     | Pushing resources to the client before requested         | Won't be implemented                                                                                                  |
+| io_uring                  | 🚧     | Asynchronous I/O for Linux                               | Blocked #1                                                                                                            |
+| ktls                      | 🚧     | Kernel TLS for Linux and FreeBSD                         | Blocked #2                                                                                                            |
+| Last-Modified Caching     | ✅     | Cache files using the modification date                  | Fully supported                                                                                                       |
+| Markdown Rendering        | 🤕     | Render Markdown files to HTML                            | Experimental                                                                                                          |
+| Memory Cache              | ✅     | Cache files in memory for faster access                  | Uses [`stretto`](https://docs.rs/stretto/latest/stretto/)                                                             |
+| OPTIONS method            | ✅     | Detecting server and resource capabilities               | Experimental                                                                                                          |
+| TLS                       | ✅     | Transport Layer Security (HTTPS)                         | Uses [`rustls`](https://docs.rs/rustls/latest/rustls/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/)  |
+| Transfer-Encoding         | ✅     | Sending data in chunks                                   | `chunked` encoding is supported                                                                                       |
+| WebSockets                | ❌     | Real-time communication between client and server        | Not implemented yet                                                                                                   |
 
 
 ## 🛠️ Building
