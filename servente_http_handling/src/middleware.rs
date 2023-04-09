@@ -29,6 +29,14 @@ pub trait Middleware: DynClone + Send + Sync {
     /// displaying them in the error body.
     fn debug_identifier(&self) -> &str;
 
+    /// Asynchronously handle the request by invoking this function. Note that
+    /// the behavior of invocations are order-dependent, meaning that middleware
+    /// down the line can substantially change the contents of the response.
+    ///
+    /// Protocol-dependent behavior is managed by the protocol suites like
+    /// `servente_http1`, meaning that these behaviors can only be communicated
+    /// by using the correct structure, or sometimes not at all, e.g.
+    /// [Transfer-Encoding](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding).
     async fn invoke(&mut self, state: &mut ExchangeState) -> Result<(), MiddlewareError>;
 }
 
