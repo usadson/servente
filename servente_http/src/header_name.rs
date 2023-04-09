@@ -223,6 +223,38 @@ impl From<String> for HeaderName {
 }
 
 impl HeaderName {
+    /// This class defines which specification and/or behavior the field name
+    /// belongs to.
+    pub fn class(&self) -> HeaderNameClass {
+        match self {
+            HeaderName::Connection
+                | HeaderName::KeepAlive
+                | HeaderName::TE
+                | HeaderName::TransferEncoding
+                | HeaderName::Upgrade => HeaderNameClass::ConnectionSpecific,
+            HeaderName::Other(_) if self.is_cgi_extension_field() => HeaderNameClass::CgiExtension,
+            _ => HeaderNameClass::Other,
+        }
+    }
+
+    /// Returns whether or not this field is an CGI extension field. These may
+    /// convey information between a CGI script and a web server.
+    ///
+    /// # References
+    /// * [RFC 3875 Section 6.3.5](https://www.rfc-editor.org/rfc/rfc3875#section-6.3.5)
+    pub fn is_cgi_extension_field(&self) -> bool {
+        let Self::Other(str) = self else {
+            return false;
+        };
+
+        const HEADER_NAME_PREFIX_X_CGI: &str = "x-cgi-";
+        if str.len() < HEADER_NAME_PREFIX_X_CGI.len() {
+            return false;
+        }
+
+        unicase::eq_ascii(&str[0..HEADER_NAME_PREFIX_X_CGI.len()], str)
+    }
+
     #[must_use]
     pub fn to_string_h1(&self) -> &str {
         match self {
@@ -437,6 +469,21 @@ impl HeaderName {
             HeaderName::XXSSProtection => "x-xss-protection",
         })
     }
+}
+
+/// This class defines which specification and/or behavior the field name
+/// belongs to.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HeaderNameClass {
+    /// The header name is specific to communication between the server and the
+    /// CGI script.
+    CgiExtension,
+
+    /// The header name is a connection-specific value, applicable for HTTP/1.x
+    /// connections.
+    ConnectionSpecific,
+
+    Other,
 }
 
 #[cfg(test)]
