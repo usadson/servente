@@ -6,6 +6,7 @@ pub mod handler;
 pub mod middleware;
 pub mod responses;
 
+use std::path::PathBuf;
 use std::{
     path::Path,
     sync::Arc,
@@ -56,6 +57,29 @@ fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime)
     }
 
     None
+}
+
+/// Finds the file as provided by the request path in the specified `wwwroot`.
+///
+/// This function also validates the contents of the request path, hence
+/// returning an error of type [`Response`] when it occurs.
+pub fn find_request_path_in_wwwroot(root: &Path, request_target: &str) -> Result<PathBuf, Response> {
+    let Ok(url_decoded) = urlencoding::decode(&request_target[1..]) else {
+        return Err(Response::with_status_and_string_body(StatusCode::BadRequest, "Bad Request"));
+    };
+
+    let path = root.join(url_decoded.into_owned());
+    if !path.starts_with(&root) {
+        return Err(Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display())));
+    }
+
+    for component in path.components() {
+        if let std::path::Component::ParentDir = component {
+            return Err(Response::with_status_and_string_body(StatusCode::Forbidden, "Forbidden"));
+        }
+    }
+
+    Ok(path)
 }
 
 /// Finishes a response for an error response.
@@ -245,20 +269,10 @@ async fn handle_request_inner(request: &Request, settings: &ServenteSettings) ->
         };
 
         let root = current_directory.join("wwwroot");
-        let Ok(url_decoded) = urlencoding::decode(&request_target[1..]) else {
-            return Response::with_status_and_string_body(StatusCode::BadRequest, "Bad Request");
+        let path = match find_request_path_in_wwwroot(&root, request_target) {
+            Ok(path) => path,
+            Err(response) => return response,
         };
-
-        let path = root.join(url_decoded.into_owned());
-        if !path.starts_with(&root) {
-            return Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display()));
-        }
-
-        for component in path.components() {
-            if let std::path::Component::ParentDir = component {
-                return Response::with_status_and_string_body(StatusCode::Forbidden, "Forbidden");
-            }
-        }
 
         if let Some(served_file_response) = serve_file(request, &path).await {
             return served_file_response;
