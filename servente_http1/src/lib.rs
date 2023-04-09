@@ -1,7 +1,7 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-mod read;
+pub mod read;
 
 pub(crate) use read::*;
 
@@ -773,6 +773,7 @@ mod tests {
             handler_controller: HandlerController::new(),
             read_headers_timeout: Duration::from_secs(5),
             read_body_timeout: Duration::from_secs(5),
+            middleware: Vec::new(),
         };
     }
 

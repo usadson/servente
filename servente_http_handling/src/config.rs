@@ -1,7 +1,9 @@
 // Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org>
 // All Rights Reserved.
 
-use std::time::Duration;
+use std::{time::Duration, sync::Arc};
+
+use crate::Middleware;
 
 #[derive(Clone)]
 pub struct ServenteConfig {
@@ -64,6 +66,20 @@ pub struct ServenteSettings {
     /// If the client doesn't transmit the full body within
     /// this time, the request is terminated.
     pub read_body_timeout: Duration,
+
+    /// TODO: file serving should become middleware too.
+    pub middleware: Vec<Arc<dyn Middleware>>,
+}
+
+impl ServenteSettings {
+    pub fn new(handler_controller: crate::handler::HandlerController) -> Self {
+        Self {
+            handler_controller,
+            read_headers_timeout: Duration::from_secs(10),
+            read_body_timeout: Duration::from_secs(60),
+            middleware: Vec::new()
+        }
+    }
 }
 
 #[cfg(feature = "tls-boring")]

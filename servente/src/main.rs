@@ -35,10 +35,19 @@ async fn begin() -> io::Result<()> {
     let mut handler_controller = handler::HandlerController::new();
     example_handlers::register(&mut handler_controller);
 
+    let middleware = Vec::new();
+
+    #[cfg(feature = "cgi")]
+    let mut middleware = middleware;
+
+    #[cfg(feature = "cgi")]
+    setup_cgi(&mut middleware);
+
     let config = ServenteConfig::new().build(ServenteSettings {
         handler_controller,
         read_headers_timeout: Duration::from_secs(45),
         read_body_timeout: Duration::from_secs(60),
+        middleware,
     });
 
     #[cfg(feature = "http3")]
@@ -73,4 +82,11 @@ async fn begin() -> io::Result<()> {
 
     println!("Stopped after {} ms", start.elapsed().as_millis());
     Ok(())
+}
+
+#[cfg(feature = "cgi")]
+fn setup_cgi(middleware: &mut Vec<std::sync::Arc<dyn servente_http_handling::Middleware>>) {
+    use std::sync::Arc;
+
+    middleware.push(Arc::new(servente_cgi::CgiMiddleware::new()));
 }

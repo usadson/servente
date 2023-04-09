@@ -27,6 +27,7 @@ fn setup_configuration() -> ServenteConfig {
             handler_controller,
             read_headers_timeout: Duration::from_secs(10),
             read_body_timeout: Duration::from_secs(10),
+            middleware: Vec::new(),
         })
 }
 

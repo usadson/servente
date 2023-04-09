@@ -3,14 +3,17 @@
 
 pub mod config;
 pub mod handler;
+pub mod middleware;
 pub mod responses;
 
+use std::path::PathBuf;
 use std::{
     path::Path,
     sync::Arc,
     time::SystemTime, env::current_dir,
 };
 
+use middleware::ExchangeState;
 use servente_http::{HttpParseError, lists::find_best_match_in_weighted_list};
 
 use servente_http::*;
@@ -20,6 +23,8 @@ pub use config::{
     ServenteConfig,
     ServenteSettings,
 };
+
+pub use middleware::Middleware;
 
 /// Checks if the request is not modified and returns a 304 response if it isn't.
 fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime) -> Option<Response> {
@@ -52,6 +57,29 @@ fn check_not_modified(request: &Request, path: &Path, modified_date: SystemTime)
     }
 
     None
+}
+
+/// Finds the file as provided by the request path in the specified `wwwroot`.
+///
+/// This function also validates the contents of the request path, hence
+/// returning an error of type [`Response`] when it occurs.
+pub fn find_request_path_in_wwwroot(root: &Path, request_target: &str) -> Result<PathBuf, Response> {
+    let Ok(url_decoded) = urlencoding::decode(&request_target[1..]) else {
+        return Err(Response::with_status_and_string_body(StatusCode::BadRequest, "Bad Request"));
+    };
+
+    let path = root.join(url_decoded.into_owned());
+    if !path.starts_with(&root) {
+        return Err(Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display())));
+    }
+
+    for component in path.components() {
+        if let std::path::Component::ParentDir = component {
+            return Err(Response::with_status_and_string_body(StatusCode::Forbidden, "Forbidden"));
+        }
+    }
+
+    Ok(path)
 }
 
 /// Finishes a response for an error response.
@@ -156,6 +184,53 @@ pub async fn handle_parse_error(error: HttpParseError) -> Response {
 
 /// Handles a request.
 pub async fn handle_request(request: &Request, settings: &ServenteSettings) -> Response {
+    let mut exchange_state = ExchangeState {
+        request,
+        response: handle_request_inner(request, settings).await,
+    };
+
+    for middleware in &settings.middleware {
+        let mut middleware = Arc::clone(middleware);
+        let middleware = dyn_clone::arc_make_mut(&mut middleware);
+
+        if let Err(e) = middleware.invoke(&mut exchange_state).await {
+            #[cfg(debug_assertions)]
+            match e {
+                middleware::MiddlewareError::RecoverableError(e) => {
+                    println!("[Middleware] Recoverable error in middleware occurred: {}", e);
+                }
+
+                middleware::MiddlewareError::UnrecoverableError(e) => {
+                    return Response::with_status_and_string_body(StatusCode::ServiceUnavailable,
+                        format!(
+                            concat!(
+                                "<h1>Service Unavailable</h1>",
+                                "<hr>",
+                                "<p>An internal error occurred whilst processing your request in middleware: <b>{}</b></p>",
+                                "<h2>Error Information</h2>",
+                                "<pre>{}</pre>"
+                            ),
+                            middleware.debug_identifier(),
+                            e
+                        )
+                    );
+                }
+            }
+
+            #[cfg(not(debug_assertions))]
+            match e {
+                middleware::MiddlewareError::RecoverableError(_) => (),
+                middleware::MiddlewareError::UnrecoverableError(_) => {
+                    return Response::with_status_and_string_body(StatusCode::ServiceUnavailable, "Service Unavailable");
+                }
+            }
+        }
+    }
+
+    exchange_state.response
+}
+
+async fn handle_request_inner(request: &Request, settings: &ServenteSettings) -> Response {
     if request.method == Method::Options {
         return handle_options(request, settings).await;
     }
@@ -194,20 +269,10 @@ pub async fn handle_request(request: &Request, settings: &ServenteSettings) -> R
         };
 
         let root = current_directory.join("wwwroot");
-        let Ok(url_decoded) = urlencoding::decode(&request_target[1..]) else {
-            return Response::with_status_and_string_body(StatusCode::BadRequest, "Bad Request");
+        let path = match find_request_path_in_wwwroot(&root, request_target) {
+            Ok(path) => path,
+            Err(response) => return response,
         };
-
-        let path = root.join(url_decoded.into_owned());
-        if !path.starts_with(&root) {
-            return Response::with_status_and_string_body(StatusCode::Forbidden, format!("Forbidden\n{}\n{}", root.display(), path.display()));
-        }
-
-        for component in path.components() {
-            if let std::path::Component::ParentDir = component {
-                return Response::with_status_and_string_body(StatusCode::Forbidden, "Forbidden");
-            }
-        }
 
         if let Some(served_file_response) = serve_file(request, &path).await {
             return served_file_response;
@@ -327,6 +392,17 @@ async fn serve_file_from_disk(path: &Path) -> Option<Response> {
 
     if !metadata.is_file() {
         return None;
+    }
+
+    #[cfg(unix)]
+    {
+        use servente_resources::fs::PermissionsExt;
+
+        // Executable files are disallowed from being served, and can only be
+        // accessed through systems like CGI.
+        if metadata.permissions().is_executable() {
+            return None;
+        }
     }
 
     cache::maybe_cache_file(path).await;

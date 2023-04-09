@@ -44,7 +44,7 @@ research, and/or need major infrastructural changes.
 * Autoconfiguration for TLS certificates ([ACME](https://www.rfc-editor.org/rfc/rfc8555)) using [LetsEncrypt](https://letsencrypt.org)
 * `ktls` support for [Linux `sendfile(2)`](https://man7.org/linux/man-pages/man2/sendfile.2.html) and [FreeBSD `sendfile(2)`](https://man.freebsd.org/cgi/man.cgi?query=sendfile&sektion=2&format=html)
 * Kernel-level asynchronous I/O for Linux using [io_uring](https://man.archlinux.org/man/io_uring.7)
-* [Common Gateway Interface](https://en.wikipedia.org/wiki/Common_Gateway_Interface) support, FastCGI support and accelerated PHP for applications like WordPress.
+* FastCGI support and accelerated PHP for applications like WordPress.
 * [Reverse proxy](https://www.cloudflare.com/learning/cdn/glossary/reverse-proxy/) support
 * Minification of textual resources, notably HTML, JavaScript, CSS and JSON.
 

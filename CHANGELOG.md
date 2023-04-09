@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - General performance improvements:
   - Support `Arc<str>` in headers to share with the dynamic table
   - Use `write!` instead of `String::push_str(format!(...))`
+- Add support for CGI (Common Gateway Interface)
 
 ### Changed
 - Restructure repository for multi-crate config (Cargo workspace)

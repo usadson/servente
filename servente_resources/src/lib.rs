@@ -8,6 +8,7 @@ pub mod cache;
 pub mod content_coding;
 pub mod compression;
 pub mod exclude;
+pub mod fs;
 mod magic;
 pub mod media_type;
 pub mod static_resources;
