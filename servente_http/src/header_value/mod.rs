@@ -6,6 +6,7 @@ pub mod sec_fetch_dest;
 
 pub use sec_fetch_dest::*;
 
+use std::borrow::Cow;
 use std::{time::SystemTime, sync::Arc};
 use std::fmt::Write;
 
@@ -45,6 +46,17 @@ pub enum HeaderValue {
 }
 
 impl HeaderValue {
+    /// Returns the value as a string, and converts it to an owned string if the
+    /// internal representation is impossible to be able to retrieve it as a
+    /// string slice.
+    pub fn as_str_may_convert(&self) -> Cow<'_, str> {
+        if let Some(no_convert) = self.as_str_no_convert() {
+            Cow::Borrowed(no_convert)
+        } else {
+            Cow::Owned(self.to_string())
+        }
+    }
+
     /// Returns the value as a string, but does not convert it to a string if
     /// it is some other non-convertible type.
     #[must_use]
@@ -53,6 +65,9 @@ impl HeaderValue {
             HeaderValue::StaticString(string) => Some(string),
             HeaderValue::SharedString(string) => Some(string.as_ref()),
             HeaderValue::String(string) => Some(string),
+            HeaderValue::ContentCoding(coding) => Some(coding.http_identifier()),
+            HeaderValue::MediaType(media_type) => Some(media_type.as_str()),
+            HeaderValue::SecFetchDest(sec_fetch_dest) => Some(sec_fetch_dest.as_str()),
             _ => None,
         }
     }
