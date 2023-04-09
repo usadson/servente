@@ -380,6 +380,17 @@ async fn serve_file_from_disk(path: &Path) -> Option<Response> {
         return None;
     }
 
+    #[cfg(unix)]
+    {
+        use servente_resources::fs::PermissionsExt;
+
+        // Executable files are disallowed from being served, and can only be
+        // accessed through systems like CGI.
+        if metadata.permissions().is_executable() {
+            return None;
+        }
+    }
+
     cache::maybe_cache_file(path).await;
 
     let mut response = Response::with_status(StatusCode::Ok);

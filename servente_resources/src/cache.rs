@@ -96,6 +96,17 @@ fn is_file_appropriate_for_caching(metadata: &std::fs::Metadata) -> bool {
         return false;
     }
 
+    #[cfg(unix)]
+    {
+        use crate::fs::PermissionsExt;
+
+        // Executable files are disallowed from being cached and served, and can
+        // only be accessed through systems like CGI.
+        if metadata.permissions().is_executable() {
+            return false;
+        }
+    }
+
     metadata.len() <= FILE_CACHE_MAXIMUM_SIZE
 }
 
