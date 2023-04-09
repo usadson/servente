@@ -148,7 +148,7 @@ impl Compressor {
                 },
                 StaticTableEntry::HeaderWithValue { name, value } => {
                     if header_name == name || header_name.to_string_h1().eq_ignore_ascii_case(name.to_string_h1()) {
-                        if value == header_value || value.to_string().eq_ignore_ascii_case(header_value_as_str) {
+                        if value == header_value || value.as_str_may_convert().eq_ignore_ascii_case(header_value_as_str) {
                             return CompressIndexCandidate::FullyIndexed(index);
                         }
                         candidate = CompressIndexCandidate::NameIndexed(index);
@@ -170,7 +170,7 @@ impl Compressor {
 
         _ = compress_status_code(&mut data, response.status);
         for (header_name, header_value) in response.headers.iter() {
-            let header_value_as_str = header_value.to_string();
+            let header_value_as_str = header_value.as_str_may_convert();
             match self.find_header(header_name, header_value, &header_value_as_str) {
                 CompressIndexCandidate::None => {
                     // Literal Header Field without Indexing — New Name

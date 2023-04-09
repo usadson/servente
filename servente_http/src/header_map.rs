@@ -43,23 +43,7 @@ impl HeaderMap {
                 }
 
                 e.replace_entry_with(|_, old_value| {
-                    let old_value_string_storage;
-                    let old_value = if let Some(old_value) = old_value.as_str_no_convert() {
-                        old_value
-                    } else {
-                        old_value_string_storage = old_value.to_string();
-                        &old_value_string_storage
-                    };
-
-                    let extra_value_string_storage;
-                    let extra_value = if let Some(extra_value) = value.as_str_no_convert() {
-                        extra_value
-                    } else {
-                        extra_value_string_storage = value.to_string();
-                        &extra_value_string_storage
-                    };
-
-                    Some(HeaderValue::from(format!("{}, {}", old_value, extra_value)))
+                    Some(HeaderValue::from(format!("{}, {}", old_value.as_str_may_convert(), value.as_str_may_convert())))
                 });
             }
             hashbrown::hash_map::Entry::Vacant(e) => {
