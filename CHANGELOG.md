@@ -1,7 +1,16 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## 0.3.0
+## Unreleased
+
+### Added
+
+### Changed
+
+### Fixed
+
+
+## [0.3.0](https://github.com/usadson/servente/releases/tag/v0.3.0)
 
 ### Added
 - Added roadmap describing upcoming features and changes

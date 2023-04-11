@@ -80,6 +80,7 @@ more here:
 ## 📚 Quick Links
 * [CommonMark](https://spec.commonmark.org/0.30/)
 * [RFC 3875: The Common Gateway Interface (CGI) Version 1.1](https://www.rfc-editor.org/rfc/rfc3875)
+* [RFC 6455: The WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455)
 * [RFC 7541: HPACK Header Compression for HTTP/2](https://httpwg.org/specs/rfc7541.html)
 * [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
 * [RFC 9111: HTTP Caching](https://www.rfc-editor.org/rfc/rfc9111.html)
@@ -88,6 +89,7 @@ more here:
 * [RFC 9113: HTTP/3](https://www.rfc-editor.org/rfc/rfc9114.html)
 * [RFC 9204: QPACK Header Field Compression for HTTP/3](https://httpwg.org/specs/rfc9204.html)
 * [HTTP Working Group](https://httpwg.org/)
+* [WebSockets Standard](https://websockets.spec.whatwg.org)
 
 ## ⚖️ Copyright
 **Servente**, and all of it's components, with the exception of
