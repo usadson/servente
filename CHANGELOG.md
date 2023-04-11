@@ -1,7 +1,7 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## 0.3.0
 
 ### Added
 - Added roadmap describing upcoming features and changes
