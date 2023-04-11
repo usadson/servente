@@ -5,16 +5,15 @@ repository.workspace = true
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-license-file = "../COPYING"
 
 [dependencies]
 hashbrown = "*"
 itertools = "*"
 ktls = { version = "*", optional = true }
 lazy_static = "*"
-rustls = { version = "*", features = ["quic", "secret_extraction"], optional = true }
+rustls = { workspace = true, optional = true }
 tokio = { version = "*", features = ["full"] }
-tokio-rustls = { version = "*", optional = true }
+tokio-rustls = { workspace = true, optional = true }
 tokio-uring = { version = "*", optional = true }
 
 boring = { workspace = true, optional = true }

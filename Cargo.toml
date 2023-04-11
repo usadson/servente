@@ -18,7 +18,7 @@ members = [
 [workspace.package]
 edition = "2021"
 repository = "https://github.com/usadson/servente/"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Tristan Gerritsen"]
 license = "Apache-2.0"
 license-file = "COPYING"
@@ -39,8 +39,9 @@ debug = true
 [workspace.dependencies]
 tokio = { version = "*", features = ["full"] }
 
-rustls = { version = "*", features = ["quic", "secret_extraction"] }
-tokio-rustls = "*"
+# Blocked by quinn
+rustls = { version = "0.20.3", features = ["quic", "secret_extraction"] }
+tokio-rustls = "0.23.4"
 
 boring = { version = "*" }
 tokio-boring = { version = "*" }

@@ -5,14 +5,13 @@ repository.workspace = true
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-license-file = "../COPYING"
 
 [dependencies]
 hashbrown = "*"
 itertools = "*"
 lazy_static = "*"
 quinn = { version = "*", features = ["rustls"] }
-rustls = { version = "*", features = ["quic", "secret_extraction"] }
+rustls = { workspace = true }
 tokio = { version = "*", features = ["full"] }
 tokio-rustls = "*"
 

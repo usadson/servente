@@ -5,7 +5,6 @@ repository.workspace = true
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-license-file = "../COPYING"
 
 [dependencies]
 anyhow = "*"
@@ -13,7 +12,7 @@ async-trait = "*"
 dyn-clone = "*"
 httpdate = "*"
 itertools = "*"
-rustls = { version = "*", features = ["quic", "secret_extraction"], optional = true }
+rustls = { workspace = true, optional = true }
 tokio = { version = "*", features = ["full"] }
 urlencoding = "*"
 
