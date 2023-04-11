@@ -36,6 +36,7 @@ servente-http-handling = { version = "*", path = "../servente-http-handling", de
 servente-http1 = { version = "*", path = "../servente-http1", default-features = false }
 servente-http2 = { version = "*", path = "../servente-http2", optional = true, default-features = false }
 servente-http3 = { version = "*", path = "../servente-http3", optional = true, default-features = false }
+servente-web-sockets = { version = "*", path = "../servente-web-sockets", optional = true }
 
 [dev-dependencies]
 rstest = "*"
@@ -124,4 +125,8 @@ tls-boring = [
 # Watch for changes in the filesystem
 watch = [
     "servente-resources/watch"
+]
+
+websockets = [
+    "dep:servente-web-sockets"
 ]

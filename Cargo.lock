@@ -1928,6 +1928,7 @@ dependencies = [
  "servente-http2",
  "servente-http3",
  "servente-resources",
+ "servente-web-sockets",
  "strum_macros",
  "tokio",
  "tokio-boring",
@@ -2010,6 +2011,7 @@ dependencies = [
  "servente-http-handling",
  "servente-http2",
  "servente-resources",
+ "servente-web-sockets",
  "tempfile",
  "tokio",
  "tokio-boring",
@@ -2073,6 +2075,16 @@ dependencies = [
  "boring",
  "rcgen",
  "rustls",
+]
+
+[[package]]
+name = "servente-web-sockets"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "hashbrown",
+ "tokio",
 ]
 
 [[package]]

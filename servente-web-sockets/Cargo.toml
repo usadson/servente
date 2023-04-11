@@ -1,0 +1,15 @@
+[package]
+name = "servente-web-sockets"
+edition.workspace = true
+repository.workspace = true
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[features]
+
+[dependencies]
+anyhow = "*"
+async-trait = "*"
+hashbrown = "*"
+tokio = { workspace = true }

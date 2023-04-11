@@ -25,6 +25,7 @@ servente-http = { version = "*", path = "../servente-http" }
 servente-http-handling = { version = "*", path = "../servente-http-handling" }
 servente-http2 = { version = "*", path = "../servente-http2", optional = true }
 servente-resources = { version = "*", path = "../servente-resources" }
+servente-web-sockets = { version = "*", path = "../servente-web-sockets", optional = true }
 
 [dev-dependencies]
 rstest = "*"
@@ -49,6 +50,10 @@ tls-boring = [
     "dep:tokio-boring",
     "servente-http-handling/tls-boring",
     "servente-http2?/tls-boring",
+]
+
+websockets = [
+    "dep:servente-web-sockets",
 ]
 
 [[bin]]

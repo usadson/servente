@@ -13,6 +13,7 @@ members = [
     "servente-http3",
     "servente-resources",
     "servente-self-signed-cert",
+    "servente-web-sockets",
 ]
 
 [workspace.package]
