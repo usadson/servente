@@ -3,6 +3,9 @@ name = "servente_resources"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true
+authors.workspace = true
+license.workspace = true
+license-file = "../COPYING"
 
 [dependencies]
 brotli = { version = "*", default-features = false, features = ["std"] }

@@ -3,6 +3,9 @@ name = "collaudatrice"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true
+authors.workspace = true
+license.workspace = true
+license-file = "../COPYING"
 
 [dependencies]
 anyhow = { version = "*", features = ["backtrace"]}

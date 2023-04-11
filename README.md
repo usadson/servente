@@ -83,3 +83,11 @@ more here:
 * [RFC 9113: HTTP/3](https://www.rfc-editor.org/rfc/rfc9114.html)
 * [RFC 9204: QPACK Header Field Compression for HTTP/3](https://httpwg.org/specs/rfc9204.html)
 * [HTTP Working Group](https://httpwg.org/)
+
+## Copyright
+**Servente**, and all of it's components, with the exception of
+[third-party software](./THIRDPARTY), is licensed under the
+[Apache License 2.0](./COPYING).
+
+> Copyright (C) 2023 Tristan Gerritsen <tristan@thewoosh.org> \
+> All Rights Reserved.

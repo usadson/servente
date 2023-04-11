@@ -3,6 +3,9 @@ name = "servente_http2"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true
+authors.workspace = true
+license.workspace = true
+license-file = "../COPYING"
 
 [dependencies]
 hashbrown = "*"

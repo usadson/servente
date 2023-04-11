@@ -3,6 +3,9 @@ name = "servente_self_signed_cert"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true
+authors.workspace = true
+license.workspace = true
+license-file = "../COPYING"
 
 [dependencies]
 rcgen = "*"
@@ -13,4 +16,3 @@ rustls = { workspace = true, optional = true }
 [features]
 tls-boring = ["dep:boring"]
 tls-rustls = ["dep:rustls"]
-

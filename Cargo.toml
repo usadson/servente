@@ -19,6 +19,9 @@ members = [
 edition = "2021"
 repository = "https://github.com/usadson/servente/"
 version = "0.2.1"
+authors = ["Tristan Gerritsen"]
+license = "Apache-2.0"
+license-file = "COPYING"
 
 [profile.release]
 opt-level = 3
