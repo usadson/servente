@@ -29,7 +29,7 @@ experimentation, the server remains highly performant, delivering
 | OPTIONS method            | ✅     | Detecting server and resource capabilities               | Experimental                                                                                                          |
 | TLS                       | ✅     | Transport Layer Security (HTTPS)                         | Uses [`rustls`](https://docs.rs/rustls/latest/rustls/) or [BoringSSL](https://boringssl.googlesource.com/boringssl/)  |
 | Transfer-Encoding         | ✅     | Sending data in chunks                                   | `chunked` encoding is supported                                                                                       |
-| WebSockets                | ❌     | Real-time communication between client and server        | Not implemented yet                                                                                                   |
+| WebSockets                | 🔨     | Real-time communication between client and server        | Work in progress yet                                                                                                  |
 
 
 ## 🛠️ Building
