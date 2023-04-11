@@ -29,13 +29,13 @@ boring = { workspace = true, optional = true }
 tokio-boring = { workspace = true, optional = true }
 
 servente-cgi = { version = "*", path = "../servente-cgi", optional = true, default-features = false }
-servente_generator = { version = "*", path = "../servente_generator", default-features = false }
-servente_resources = { version = "*", path = "../servente_resources" }
-servente_http = { version = "*", path = "../servente_http", default-features = false }
-servente_http_handling = { version = "*", path = "../servente_http_handling", default-features = false }
-servente_http1 = { version = "*", path = "../servente_http1", default-features = false }
-servente_http2 = { version = "*", path = "../servente_http2", optional = true, default-features = false }
-servente_http3 = { version = "*", path = "../servente_http3", optional = true, default-features = false }
+servente-generator = { version = "*", path = "../servente-generator", default-features = false }
+servente-resources = { version = "*", path = "../servente-resources" }
+servente-http = { version = "*", path = "../servente-http", default-features = false }
+servente-http-handling = { version = "*", path = "../servente-http-handling", default-features = false }
+servente-http1 = { version = "*", path = "../servente-http1", default-features = false }
+servente-http2 = { version = "*", path = "../servente-http2", optional = true, default-features = false }
+servente-http3 = { version = "*", path = "../servente-http3", optional = true, default-features = false }
 
 [dev-dependencies]
 rstest = "*"
@@ -61,67 +61,67 @@ cgi = [
 
 # Convert Markdown to HTML (does not replace original file)
 convert-markdown = [
-    "servente_generator/markdown",
-    "servente_http_handling/convert-markdown",
-    "servente_http1/convert-markdown",
-    "servente_resources/convert-markdown",
+    "servente-generator/markdown",
+    "servente-http-handling/convert-markdown",
+    "servente-http1/convert-markdown",
+    "servente-resources/convert-markdown",
 ]
 
 # Extensive debugging information for developers
 debugging = [
-    "servente_http/debugging",
-    "servente_http_handling/debugging",
-    "servente_http1/debugging",
-    "servente_http2?/debugging",
-    "servente_http3?/debugging",
-    "servente_resources/debugging",
+    "servente-http/debugging",
+    "servente-http-handling/debugging",
+    "servente-http1/debugging",
+    "servente-http2?/debugging",
+    "servente-http3?/debugging",
+    "servente-resources/debugging",
 ]
 
 io_uring = [
     "dep:tokio-uring",
-    "servente_http1/io_uring",
+    "servente-http1/io_uring",
 ]
 
 # WIP: Kernel TLS support (for `sendfile`)
 ktls = [
     "dep:ktls",
-    "servente_http1/ktls"
+    "servente-http1/ktls"
 ]
 
 # HTTP/2 support
 http2 = [
-    "dep:servente_http2",
-    "servente_http1/http2",
-    "servente_http_handling/http2",
+    "dep:servente-http2",
+    "servente-http1/http2",
+    "servente-http-handling/http2",
 ]
 
 # HTTP/3 support
 http3 = [
-    "dep:servente_http3",
-    "servente_http_handling/http3",
+    "dep:servente-http3",
+    "servente-http-handling/http3",
 ]
 
 rustls = [
     "dep:rustls",
     "dep:tokio-rustls",
-    "servente_http_handling/rustls",
-    "servente_http1/rustls",
-    "servente_http2?/rustls",
+    "servente-http-handling/rustls",
+    "servente-http1/rustls",
+    "servente-http2?/rustls",
 ]
 
 server_push = [
-    "servente_http2?/server_push"
+    "servente-http2?/server_push"
 ]
 
 tls-boring = [
     "dep:boring",
     "dep:tokio-boring",
-    "servente_http_handling/tls-boring",
-    "servente_http1/tls-boring",
-    "servente_http2?/tls-boring",
+    "servente-http-handling/tls-boring",
+    "servente-http1/tls-boring",
+    "servente-http2?/tls-boring",
 ]
 
 # Watch for changes in the filesystem
 watch = [
-    "servente_resources/watch"
+    "servente-resources/watch"
 ]

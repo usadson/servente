@@ -1,5 +1,5 @@
 [package]
-name = "servente_http1"
+name = "servente-http1"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true
@@ -20,11 +20,11 @@ boring = { workspace = true, optional = true }
 tokio-boring = { workspace = true, optional = true }
 
 
-servente_common = { version = "*", path = "../servente_common" }
-servente_http = { version = "*", path = "../servente_http" }
-servente_http_handling = { version = "*", path = "../servente_http_handling" }
-servente_http2 = { version = "*", path = "../servente_http2", optional = true }
-servente_resources = { version = "*", path = "../servente_resources" }
+servente-common = { version = "*", path = "../servente-common" }
+servente-http = { version = "*", path = "../servente-http" }
+servente-http-handling = { version = "*", path = "../servente-http-handling" }
+servente-http2 = { version = "*", path = "../servente-http2", optional = true }
+servente-resources = { version = "*", path = "../servente-resources" }
 
 [dev-dependencies]
 rstest = "*"
@@ -33,8 +33,8 @@ tempfile = "*"
 [features]
 default = ["convert-markdown"]
 debugging = []
-convert-markdown = ["servente_http_handling/convert-markdown"]
-http2 = ["dep:servente_http2"]
+convert-markdown = ["servente-http-handling/convert-markdown"]
+http2 = ["dep:servente-http2"]
 io_uring = [
     "dep:tokio-uring",
 ]
@@ -47,8 +47,8 @@ rustls = [
 tls-boring = [
     "dep:boring",
     "dep:tokio-boring",
-    "servente_http_handling/tls-boring",
-    "servente_http2?/tls-boring",
+    "servente-http-handling/tls-boring",
+    "servente-http2?/tls-boring",
 ]
 
 [[bin]]

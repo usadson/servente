@@ -1,5 +1,5 @@
 [package]
-name = "servente_resources"
+name = "servente-resources"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true
@@ -16,9 +16,9 @@ stretto = { version = "*", features = ["async"] }
 tokio = { version = "*", features = ["full"] }
 unicase = "*"
 
-servente_generator = { version = "*", path = "../servente_generator", default-features = false }
+servente-generator = { version = "*", path = "../servente-generator", default-features = false }
 
 [features]
-convert-markdown = ["servente_generator/markdown"]
+convert-markdown = ["servente-generator/markdown"]
 debugging = []
 watch = ["dep:notify"]

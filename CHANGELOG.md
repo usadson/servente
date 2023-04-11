@@ -32,6 +32,7 @@ All notable changes to this project will be documented in this file.
 - Streamline HTTP parsing for shared semantics (e.g. `request-target`)
 - More tests are added to prove code works at build-time, and still works after (internal) changes
 - Mask `.htaccess` files so they now also return **`404 Not Found`**
+- Updated dependencies
 
 ### Fixed
 - **ALPN** and **`Alt-Svc`** weren't based on feature detection, so for example
@@ -40,6 +41,7 @@ All notable changes to this project will be documented in this file.
 - Broken **HTTP/2** upgrade, this is now tested
 - HTTP/2 is now almost fully supported and very usable
 - Failing builds for builds without the `convert-markdown` feature flag
+- Executable files won't be served now on *NIX (i.e. `chmod +x`) as a security measure and for CGI support
 
 ## [0.2.0](https://github.com/usadson/servente/releases/tag/v0.2.0) - 2023-03-26
 Beta build with support for HTTP/2 and caching.

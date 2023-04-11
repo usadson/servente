@@ -1,5 +1,5 @@
 [package]
-name = "servente_http"
+name = "servente-http"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true
@@ -14,7 +14,7 @@ strum_macros = "*"
 tokio = { version = "*", features = ["full"] }
 unicase = "*"
 
-servente_resources = { version = "*", path = "../servente_resources" }
+servente-resources = { version = "*", path = "../servente-resources" }
 
 [dev-dependencies]
 float-cmp = "*"

@@ -1,5 +1,5 @@
 [package]
-name = "servente_http_handling"
+name = "servente-http-handling"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true
@@ -19,27 +19,27 @@ urlencoding = "*"
 boring = { workspace = true, optional = true }
 tokio-boring = { workspace = true, optional = true }
 
-servente_http = { version = "*", path = "../servente_http" }
-servente_resources = { version = "*", path = "../servente_resources" }
-servente_self_signed_cert = { version = "*", path = "../servente-self-signed-cert", optional = true }
+servente-http = { version = "*", path = "../servente-http" }
+servente-resources = { version = "*", path = "../servente-resources" }
+servente-self-signed-cert = { version = "*", path = "../servente-self-signed-cert", optional = true }
 
 [features]
 default = ["convert-markdown"]
 debugging = []
 convert-markdown = [
-    "servente_resources/convert-markdown"
+    "servente-resources/convert-markdown"
 ]
 http2 = []
 http3 = []
 rustls = [
     "dep:rustls",
-    "dep:servente_self_signed_cert",
-    "servente_self_signed_cert?/tls-rustls",
+    "dep:servente-self-signed-cert",
+    "servente-self-signed-cert?/tls-rustls",
 ]
 
 tls-boring = [
     "dep:boring",
     "dep:tokio-boring",
-    "dep:servente_self_signed_cert",
-    "servente_self_signed_cert?/tls-boring",
+    "dep:servente-self-signed-cert",
+    "servente-self-signed-cert?/tls-boring",
 ]

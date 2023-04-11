@@ -1,5 +1,5 @@
 [package]
-name = "servente_common"
+name = "servente-common"
 edition.workspace = true
 repository.workspace = true
 version.workspace = true

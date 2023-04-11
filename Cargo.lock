@@ -1921,13 +1921,13 @@ dependencies = [
  "rustls-pemfile",
  "scraper",
  "servente-cgi",
- "servente_generator",
- "servente_http",
- "servente_http1",
- "servente_http2",
- "servente_http3",
- "servente_http_handling",
- "servente_resources",
+ "servente-generator",
+ "servente-http",
+ "servente-http-handling",
+ "servente-http1",
+ "servente-http2",
+ "servente-http3",
+ "servente-resources",
  "strum_macros",
  "tokio",
  "tokio-boring",
@@ -1942,26 +1942,26 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "servente_http",
- "servente_http1",
- "servente_http_handling",
- "servente_resources",
+ "servente-http",
+ "servente-http-handling",
+ "servente-http1",
+ "servente-resources",
  "tokio",
 ]
 
 [[package]]
-name = "servente_common"
+name = "servente-common"
 version = "0.3.0"
 
 [[package]]
-name = "servente_generator"
+name = "servente-generator"
 version = "0.1.0"
 dependencies = [
  "regex",
 ]
 
 [[package]]
-name = "servente_http"
+name = "servente-http"
 version = "0.3.0"
 dependencies = [
  "float-cmp",
@@ -1969,71 +1969,14 @@ dependencies = [
  "httpdate",
  "phf 0.11.1",
  "rstest",
- "servente_resources",
+ "servente-resources",
  "strum_macros",
  "tokio",
  "unicase",
 ]
 
 [[package]]
-name = "servente_http1"
-version = "0.3.0"
-dependencies = [
- "boring",
- "hashbrown",
- "itertools",
- "ktls",
- "lazy_static",
- "rstest",
- "rustls",
- "servente_common",
- "servente_http",
- "servente_http2",
- "servente_http_handling",
- "servente_resources",
- "tempfile",
- "tokio",
- "tokio-boring",
- "tokio-rustls",
- "tokio-uring",
-]
-
-[[package]]
-name = "servente_http2"
-version = "0.3.0"
-dependencies = [
- "boring",
- "hashbrown",
- "itertools",
- "lazy_static",
- "rstest",
- "rustls",
- "servente_http",
- "servente_http_handling",
- "tokio",
- "tokio-boring",
- "tokio-rustls",
-]
-
-[[package]]
-name = "servente_http3"
-version = "0.3.0"
-dependencies = [
- "hashbrown",
- "itertools",
- "lazy_static",
- "quinn",
- "rstest",
- "rustls",
- "servente_common",
- "servente_http",
- "servente_http_handling",
- "tokio",
- "tokio-rustls",
-]
-
-[[package]]
-name = "servente_http_handling"
+name = "servente-http-handling"
 version = "0.3.0"
 dependencies = [
  "anyhow",
@@ -2043,16 +1986,73 @@ dependencies = [
  "httpdate",
  "itertools",
  "rustls",
- "servente_http",
- "servente_resources",
- "servente_self_signed_cert",
+ "servente-http",
+ "servente-resources",
+ "servente-self-signed-cert",
  "tokio",
  "tokio-boring",
  "urlencoding",
 ]
 
 [[package]]
-name = "servente_resources"
+name = "servente-http1"
+version = "0.3.0"
+dependencies = [
+ "boring",
+ "hashbrown",
+ "itertools",
+ "ktls",
+ "lazy_static",
+ "rstest",
+ "rustls",
+ "servente-common",
+ "servente-http",
+ "servente-http-handling",
+ "servente-http2",
+ "servente-resources",
+ "tempfile",
+ "tokio",
+ "tokio-boring",
+ "tokio-rustls",
+ "tokio-uring",
+]
+
+[[package]]
+name = "servente-http2"
+version = "0.3.0"
+dependencies = [
+ "boring",
+ "hashbrown",
+ "itertools",
+ "lazy_static",
+ "rstest",
+ "rustls",
+ "servente-http",
+ "servente-http-handling",
+ "tokio",
+ "tokio-boring",
+ "tokio-rustls",
+]
+
+[[package]]
+name = "servente-http3"
+version = "0.3.0"
+dependencies = [
+ "hashbrown",
+ "itertools",
+ "lazy_static",
+ "quinn",
+ "rstest",
+ "rustls",
+ "servente-common",
+ "servente-http",
+ "servente-http-handling",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
+name = "servente-resources"
 version = "0.3.0"
 dependencies = [
  "brotli",
@@ -2060,14 +2060,14 @@ dependencies = [
  "lazy_static",
  "notify",
  "phf 0.11.1",
- "servente_generator",
+ "servente-generator",
  "stretto",
  "tokio",
  "unicase",
 ]
 
 [[package]]
-name = "servente_self_signed_cert"
+name = "servente-self-signed-cert"
 version = "0.3.0"
 dependencies = [
  "boring",

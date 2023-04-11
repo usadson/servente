@@ -14,7 +14,7 @@ anyhow = "*"
 
 tokio = { workspace = true }
 
-servente_http = { version = "*", path = "../servente_http" }
-servente_http_handling = { version = "*", path = "../servente_http_handling" }
-servente_http1 = { version = "*", path = "../servente_http1" }
-servente_resources = { version = "*", path = "../servente_resources" }
+servente-http = { version = "*", path = "../servente-http" }
+servente-http-handling = { version = "*", path = "../servente-http-handling" }
+servente-http1 = { version = "*", path = "../servente-http1" }
+servente-resources = { version = "*", path = "../servente-resources" }

@@ -4,14 +4,14 @@ cargo-features = ["profile-rustflags"]
 members = [
     "collaudatrice",
     "servente",
-    "servente_common",
-    "servente_generator",
-    "servente_http",
-    "servente_http_handling",
-    "servente_http2",
-    "servente_http3",
-    "servente_resources",
     "servente-cgi",
+    "servente-common",
+    "servente-generator",
+    "servente-http",
+    "servente-http-handling",
+    "servente-http2",
+    "servente-http3",
+    "servente-resources",
     "servente-self-signed-cert",
 ]
 
