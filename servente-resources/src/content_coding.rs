@@ -13,6 +13,11 @@ use std::io::Write;
 /// Chromium for example, [only supports](https://source.chromium.org/chromium/chromium/src/+/main:ui/base/resource/resource_bundle.cc;l=178;drc=4cc7ba01d3c5dc996ddc98f9d0bd709e3d5bbfd3;bpv=1;bpt=1)
 /// `gzip` and `br` encodings.
 ///
+/// ### Deflate
+/// Historically, `deflate` was commonly used to compress response data, but
+/// Microsoft's web services were not compliant with the HTTP specification.
+/// This is also the reason that this encoding is not supported in Servente.
+///
 /// ## References
 /// * [IANA HTTP Content Coding Registry](https://www.iana.org/assignments/http-parameters/http-parameters.xhtml#content-coding)
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
