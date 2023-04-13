@@ -8,6 +8,7 @@
 use std::{
     path::{Path, PathBuf},
     time::Duration,
+    sync::RwLock,
 };
 
 use rstest::rstest;
@@ -30,7 +31,11 @@ const CURL_STATUS_UNSUPPORTED_PROTOCOL: i32 = 1;
 const CURL_STATUS_FAILED_TO_INITIALIZE: i32 = 2;
 const CURL_STATUS_FEATURE_NOT_ENABLED: i32 = 4;
 
-static SERVENTE: OnceCell<Child> = OnceCell::const_new();
+static SERVENTE: OnceCell<RwLock<Child>> = OnceCell::const_new();
+
+fn cleanup() {
+    _ = SERVENTE.get().unwrap().write().unwrap().start_kill();
+}
 
 /// Spawn servente as a background process.
 fn spawn_servente<P>(working_directory: P) -> Child
@@ -138,7 +143,12 @@ async fn homepage(#[case] args: &[&str]) {
             }
         }).await.expect("Failed to start servente!");
 
-        servente
+        std::panic::set_hook(Box::new(|_| {
+            cleanup();
+            let _ = std::panic::take_hook();
+        }));
+
+        servente.into()
     }).await;
 
     let base_url = "https://localhost:8080/";
