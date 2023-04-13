@@ -114,45 +114,13 @@ impl CgiMiddleware {
         Some(command)
     }
 
-    /// Creates a process for the given command.
-    async fn create_process_from_command<'a>(&self,
-            mut command: tokio::process::Command,
-            state: &mut ExchangeState<'a>
-        ) -> Result<Option<tokio::process::Child>, anyhow::Error> {
-        match command.spawn() {
-            Ok(process) => Ok(Some(process)),
-            Err(e) => {
-                match e.kind() {
-                    std::io::ErrorKind::PermissionDenied => {
-                        state.response = Response::with_status_and_string_body(StatusCode::NotFound, format!("Nfot Found: {e:?}"));
-                        return Ok(None);
-                    }
-                    std::io::ErrorKind::NotFound => {
-                        state.response = Response::with_status_and_string_body(StatusCode::NotFound, format!("Nfot Found: {e:?}"));
-                        return Ok(None);
-                    }
-                    _ => ()
-                }
-
-                #[cfg(not(debug_assertions))]
-                return Err(e.into());
-
-                #[cfg(debug_assertions)]
-                {
-                    state.response = Response::with_status_and_string_body(StatusCode::InternalServerError, format!("Error: {e}"));
-                    return Ok(None);
-                }
-            }
-        }
-    }
-
     /// The entrypoint for the CGI middleware.
     async fn invoke_cgi<'a>(&self, state: &mut ExchangeState<'a>) -> Result<(), anyhow::Error> {
-        let Some(command) = self.create_cgi_script_command(state.request) else {
+        let Some(mut command) = self.create_cgi_script_command(state.request) else {
             return Ok(())
         };
 
-        let Some(mut process) = self.create_process_from_command(command, state).await? else {
+        let Ok(mut process) = command.spawn() else {
             return Ok(());
         };
 
