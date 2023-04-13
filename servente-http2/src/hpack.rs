@@ -18,13 +18,17 @@ use std::{
 use tokio::sync::Mutex;
 
 use servente_http::{
-    HeaderName,
     HeaderMap,
+    HeaderMapInsertionError,
+    HeaderName,
+    HeaderNameClass,
     HeaderValue,
+    HttpVersion,
     Method,
     Request,
+    RequestTarget,
     Response,
-    StatusCode, HttpVersion, RequestTarget, HeaderMapInsertionError,
+    StatusCode,
 };
 
 /// HPACK write extensions for [`Write`] objects
@@ -170,6 +174,14 @@ impl Compressor {
 
         _ = compress_status_code(&mut data, response.status);
         for (header_name, header_value) in response.headers.iter() {
+            // Connection-specific headers are a HTTP/1.1 feature, since future
+            // version of HTTP, including HTTP/2, manage the connection state in
+            // other ways.
+            // These headers include `Connection`, `Keep-Alive`, etc.
+            if header_name.class() == HeaderNameClass::ConnectionSpecific {
+                continue;
+            }
+
             let header_value_as_str = header_value.as_str_may_convert();
             match self.find_header(header_name, header_value, &header_value_as_str) {
                 CompressIndexCandidate::None => {
