@@ -26,6 +26,10 @@ use tokio::{
 
 use assert_cmd::prelude::*;
 
+const CURL_STATUS_UNSUPPORTED_PROTOCOL: i32 = 1;
+const CURL_STATUS_FAILED_TO_INITIALIZE: i32 = 2;
+const CURL_STATUS_FEATURE_NOT_ENABLED: i32 = 4;
+
 static SERVENTE: OnceCell<Child> = OnceCell::const_new();
 
 /// Spawn servente as a background process.
@@ -41,7 +45,7 @@ fn spawn_servente<P>(working_directory: P) -> Child
         .expect(&format!("Failed to start servente in dir: {}", working_directory.display()))
 }
 
-async fn invoke_curl(url: &str, args: &[&str]) -> Vec<u8> {
+async fn invoke_curl(url: &str, args: &[&str]) -> Result<Vec<u8>, String> {
     let mut command = Command::new("curl");
 
     command.arg("-k") // Insecure, since the certificate is self-signed
@@ -66,9 +70,29 @@ async fn invoke_curl(url: &str, args: &[&str]) -> Vec<u8> {
         .expect("cURL timed out!")
         .expect("Failed to wait_with_output");
 
-    assert!(res.status.success(), "cURL returned with status: {}, stderr: {}", res.status, String::from_utf8_lossy(&res.stderr));
+    let status_message = format!("cURL returned with status: {}, stderr: {}", res.status, String::from_utf8_lossy(&res.stderr));
 
-    res.stdout
+    // Not all systems ship with the same feature set. In this case, the test
+    // should be ignored, but it definitely should print something in this case.
+    //
+    // In the future, we might implement some kind of hard error based on the
+    // environment flags, something like: SERVENTE_CURL_ERROR_HARD_FAILURE.
+    match res.status.code() {
+        Some(CURL_STATUS_FAILED_TO_INITIALIZE) => {
+            return Err(format!("Ignoring test: cURL failed to initialize: {}", status_message));
+        }
+        Some(CURL_STATUS_FEATURE_NOT_ENABLED) => {
+            return Err(format!("Ignoring test: cURL feature not enabled: {}", status_message));
+        }
+        Some(CURL_STATUS_UNSUPPORTED_PROTOCOL) => {
+            return Err(format!("Ignoring test: cURL unsupported protocol: {}", status_message));
+        }
+        _ => (),
+    }
+
+    assert!(res.status.success(), "{status_message}");
+
+    Ok(res.stdout)
 }
 
 fn ensure_file_matches<P>(response_body: Vec<u8>, file: P)
@@ -118,12 +142,16 @@ async fn homepage(#[case] args: &[&str]) {
     }).await;
 
     let base_url = "https://localhost:8080/";
-    ensure_file_matches(invoke_curl(base_url, args).await,
-        "wwwroot/index.html");
+    match invoke_curl(base_url, args).await {
+        Ok(response_body) => ensure_file_matches(response_body, "wwwroot/index.html"),
+        Err(string) => eprintln!("{string}"),
+    }
 
     for entry in std::fs::read_dir(dir.join("wwwroot")).unwrap() {
         let entry = entry.unwrap();
-        ensure_file_matches(invoke_curl(&format!("{base_url}{}", entry.file_name().to_string_lossy()), args).await,
-            entry.path());
+        match invoke_curl(&format!("{base_url}{}", entry.file_name().to_string_lossy()), args).await {
+            Ok(response_body) => ensure_file_matches(response_body, entry.path()),
+            Err(string) => eprintln!("{string}"),
+        }
     }
 }
