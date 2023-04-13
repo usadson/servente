@@ -84,7 +84,10 @@ impl ServenteSettings {
 
 #[cfg(feature = "tls-boring")]
 fn create_tls_config_boring(alpn_list: &[&'static str]) -> boring::ssl::SslAcceptor {
-    use boring::ssl;
+    use boring::ssl::{
+        self,
+        SslOptions,
+    };
 
     let cert_data = servente_self_signed_cert::load_certificate_locations();
 
@@ -113,6 +116,10 @@ fn create_tls_config_boring(alpn_list: &[&'static str]) -> boring::ssl::SslAccep
         ssl_builder.add_extra_chain_cert(cert)
             .expect("Failed to append chain certificates");
     }
+
+    // Enable TLSv1.2 and 1.3
+    ssl_builder.clear_options(SslOptions::NO_TLSV1_2);
+    ssl_builder.clear_options(SslOptions::NO_TLSV1_3);
 
     ssl_builder.build()
 }
