@@ -38,6 +38,7 @@ servente-http2 = { version = "*", path = "../servente-http2", optional = true, d
 servente-http3 = { version = "*", path = "../servente-http3", optional = true, default-features = false }
 
 [dev-dependencies]
+assert_cmd = "*"
 rstest = "*"
 
 [features]

@@ -14,3 +14,5 @@ perf.*
 flamegraph*
 # LLVM profile data
 *.profraw
+
+!servente/tests/homepage/wwwroot

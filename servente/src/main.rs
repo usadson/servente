@@ -27,7 +27,7 @@ fn main() -> io::Result<()> {
     tokio_uring::start(begin())
 }
 
-async fn begin() -> io::Result<()> {
+pub(crate) async fn begin() -> io::Result<()> {
     let start = Instant::now();
 
     let wwwroot_path = current_dir().unwrap().join("wwwroot");
@@ -68,6 +68,8 @@ async fn begin() -> io::Result<()> {
     let join_handle_cache = task::spawn(async move {
         cache::start(&wwwroot_path_cacher).await
     });
+
+    println!("[servente] Ready.");
 
     if let Err(e) = join_handle.await.unwrap() {
         println!("Server error (HTTP/1.1): {}", e);
