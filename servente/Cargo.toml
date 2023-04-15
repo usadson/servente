@@ -5,6 +5,7 @@ repository.workspace = true
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+default-run = "servente"
 
 [dependencies]
 anyhow = "*"
