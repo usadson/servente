@@ -25,6 +25,9 @@ servente-http-handling = { version = "*", path = "../servente-http-handling" }
 servente-http2 = { version = "*", path = "../servente-http2", optional = true }
 servente-resources = { version = "*", path = "../servente-resources" }
 
+[target.'cfg(unix)'.dependencies]
+servente-common = { version = "*", path = "../servente-common" }
+
 [dev-dependencies]
 rstest = "*"
 tempfile = "*"
