@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-regex = "*"
 
 [features]
 default = ["markdown"]

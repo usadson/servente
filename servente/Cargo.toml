@@ -9,18 +9,8 @@ default-run = "servente"
 
 [dependencies]
 anyhow = "*"
-futures = "*"
-hashbrown = "*"
-itertools = "*"
-lazy_static = "*"
-rustls = { workspace = true, optional = true }
-rustls-pemfile = "*"
-strum_macros = "*"
 tokio = { workspace = true }
-tokio-rustls = { workspace = true, optional = true }
 tokio-uring = { version = "*", optional = true }
-phf = { version = "*", features = ["macros", "unicase"] }
-unicase = "*"
 
 # Optional dependencies
 scraper = { version = "*", optional = true }
@@ -54,7 +44,7 @@ default = [
 
 # Analyze files
 analysis = [
-    "dep:scraper"
+    # "dep:scraper"
 ]
 
 cgi = [
@@ -104,8 +94,8 @@ http3 = [
 ]
 
 rustls = [
-    "dep:rustls",
-    "dep:tokio-rustls",
+    # "dep:rustls",
+    # "dep:tokio-rustls",
     "servente-http-handling/rustls",
     "servente-http1/rustls",
     "servente-http2?/rustls",
@@ -116,8 +106,8 @@ server_push = [
 ]
 
 tls-boring = [
-    "dep:boring",
-    "dep:tokio-boring",
+    # "dep:boring",
+    # "dep:tokio-boring",
     "servente-http-handling/tls-boring",
     "servente-http1/tls-boring",
     "servente-http2?/tls-boring",

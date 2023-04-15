@@ -30,15 +30,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aho-corasick"
-version = "0.7.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc936419f96fa211c1b9166887b38e5e40b19958e5b895be7c1f93adec7071ac"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -398,8 +389,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
- "crossbeam-deque",
- "crossbeam-queue",
  "futures",
  "owo-colors",
  "rustls",
@@ -468,40 +457,6 @@ name = "crossbeam-channel"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a33c2bf77f2df06183c3aa30d1e96c0695a313d4f9c453cc3762a6db39f99200"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-deque"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce6fd6f855243022dcecf8702fef0c297d4338e226845fe067f6341ad9fa0cef"
-dependencies = [
- "cfg-if",
- "crossbeam-epoch",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-epoch"
-version = "0.9.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46bd5f3f85273295a9d14aedfb86f6aadbff6d8f5295c4a9edb08e819dcf5695"
-dependencies = [
- "autocfg",
- "cfg-if",
- "crossbeam-utils",
- "memoffset 0.8.0",
- "scopeguard",
-]
-
-[[package]]
-name = "crossbeam-queue"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1cfb3ea8a53f37c40dea2c7bedcbd88bdfae54f5e2175d6ecaff1c988353add"
 dependencies = [
  "cfg-if",
  "crossbeam-utils",
@@ -1041,7 +996,7 @@ dependencies = [
  "futures",
  "ktls-sys",
  "libc",
- "memoffset 0.6.5",
+ "memoffset",
  "pin-project-lite",
  "rustls",
  "smallvec",
@@ -1147,15 +1102,6 @@ name = "memoffset"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
-name = "memoffset"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d61c719bcfbcf5d62b3a09efa6088de8c54bc0bfcd3ea7ae39fcc186108b8de1"
 dependencies = [
  "autocfg",
 ]
@@ -1712,8 +1658,6 @@ version = "1.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b1f693b24f6ac912f4893ef08244d70b6067480d2f1a46e950c9691e6749d1d"
 dependencies = [
- "aho-corasick",
- "memchr",
  "regex-syntax",
 ]
 
@@ -1967,15 +1911,8 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "boring",
- "futures",
- "hashbrown",
- "itertools",
  "ktls",
- "lazy_static",
- "phf 0.11.1",
  "rstest",
- "rustls",
- "rustls-pemfile",
  "scraper",
  "servente-cgi",
  "servente-generator",
@@ -1985,12 +1922,9 @@ dependencies = [
  "servente-http2",
  "servente-http3",
  "servente-resources",
- "strum_macros",
  "tokio",
  "tokio-boring",
- "tokio-rustls",
  "tokio-uring",
- "unicase",
 ]
 
 [[package]]
@@ -2013,9 +1947,6 @@ version = "0.3.0"
 [[package]]
 name = "servente-generator"
 version = "0.1.0"
-dependencies = [
- "regex",
-]
 
 [[package]]
 name = "servente-http"
@@ -2062,7 +1993,6 @@ dependencies = [
  "lazy_static",
  "rstest",
  "rustls",
- "servente-common",
  "servente-http",
  "servente-http-handling",
  "servente-http2",
@@ -2096,16 +2026,12 @@ name = "servente-http3"
 version = "0.3.0"
 dependencies = [
  "hashbrown",
- "itertools",
  "lazy_static",
  "quinn",
  "rstest",
  "rustls",
- "servente-common",
  "servente-http",
- "servente-http-handling",
  "tokio",
- "tokio-rustls",
 ]
 
 [[package]]

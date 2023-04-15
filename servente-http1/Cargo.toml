@@ -20,7 +20,6 @@ boring = { workspace = true, optional = true }
 tokio-boring = { workspace = true, optional = true }
 
 
-servente-common = { version = "*", path = "../servente-common" }
 servente-http = { version = "*", path = "../servente-http" }
 servente-http-handling = { version = "*", path = "../servente-http-handling" }
 servente-http2 = { version = "*", path = "../servente-http2", optional = true }

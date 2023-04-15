@@ -8,16 +8,12 @@ license.workspace = true
 
 [dependencies]
 hashbrown = "*"
-itertools = "*"
 lazy_static = "*"
 quinn = { version = "*", features = ["rustls"] }
 rustls = { workspace = true }
 tokio = { version = "*", features = ["full"] }
-tokio-rustls = "*"
 
-servente-common = { version = "*", path = "../servente-common" }
 servente-http = { version = "*", path = "../servente-http" }
-servente-http-handling = { version = "*", path = "../servente-http-handling" }
 
 [dev-dependencies]
 rstest = "*"
