@@ -201,7 +201,7 @@ pub async fn handle_request(request: &Request, settings: &ServenteSettings) -> R
                 }
 
                 middleware::MiddlewareError::UnrecoverableError(e) => {
-                    return Response::with_status_and_string_body(StatusCode::ServiceUnavailable,
+                    let mut response = Response::with_status_and_string_body(StatusCode::ServiceUnavailable,
                         format!(
                             concat!(
                                 "<h1>Service Unavailable</h1>",
@@ -214,6 +214,8 @@ pub async fn handle_request(request: &Request, settings: &ServenteSettings) -> R
                             e
                         )
                     );
+                    response.headers.set_content_type(MediaType::HTML);
+                    return response;
                 }
             }
 
