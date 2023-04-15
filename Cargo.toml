@@ -10,7 +10,7 @@ members = [
     "servente-http",
     "servente-http-handling",
     "servente-http2",
-    "servente-http3",
+    # "servente-http3",
     "servente-resources",
     "servente-self-signed-cert",
 ]
@@ -40,8 +40,8 @@ debug = true
 tokio = { version = "*", features = ["full"] }
 
 # Blocked by quinn
-rustls = { version = "0.20.3", features = ["quic", "secret_extraction"] }
-tokio-rustls = "0.23.4"
+rustls = { version = "0.21.0", features = ["quic", "secret_extraction"] }
+tokio-rustls = "0.24.0"
 
 boring = { version = "*" }
 tokio-boring = { version = "*" }

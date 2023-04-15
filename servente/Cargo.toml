@@ -26,7 +26,7 @@ servente-http = { version = "*", path = "../servente-http", default-features = f
 servente-http-handling = { version = "*", path = "../servente-http-handling", default-features = false }
 servente-http1 = { version = "*", path = "../servente-http1", default-features = false }
 servente-http2 = { version = "*", path = "../servente-http2", optional = true, default-features = false }
-servente-http3 = { version = "*", path = "../servente-http3", optional = true, default-features = false }
+# servente-http3 = { version = "*", path = "../servente-http3", optional = true, default-features = false }
 
 [dev-dependencies]
 assert_cmd = "*"
@@ -65,7 +65,7 @@ debugging = [
     "servente-http-handling/debugging",
     "servente-http1/debugging",
     "servente-http2?/debugging",
-    "servente-http3?/debugging",
+    # "servente-http3?/debugging",
     "servente-resources/debugging",
 ]
 
@@ -89,7 +89,7 @@ http2 = [
 
 # HTTP/3 support
 http3 = [
-    "dep:servente-http3",
+    # "dep:servente-http3",
     "servente-http-handling/http3",
 ]
 
